@@ -1,4 +1,4 @@
-# YOLOv8 阶段一项目依赖
+# vision_learning 项目依赖
 # 核心依赖
 torch>=2.0.0
 torchvision>=0.15.0
@@ -27,6 +27,7 @@ requests>=2.31.0
 psutil>=5.9.0
 py-cpuinfo>=9.0.0
 GPUtil>=1.4.0
+Flask>=3.0.0
 
 # 开发工具（可选）
 pytest>=7.4.0

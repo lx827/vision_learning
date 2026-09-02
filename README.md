@@ -14,6 +14,7 @@
 - [项目简介](#项目简介)
 - [当前功能](#当前功能)
 - [快速开始](#快速开始)
+- [MVS 相机调试台](#mvs-相机调试台)
 - [项目结构](#项目结构)
 - [目录演进规划](#目录演进规划)
 - [文档](#文档)
@@ -98,6 +99,38 @@ python src/evaluator.py --config configs/val.yaml
 
 ---
 
+## MVS 相机调试台
+
+浏览器调试台面向海康 GigE/USB3 工业相机，提供设备枚举、IP/序列号选择、实时预览、手动拍照、定时拍照、录像，以及曝光、增益、帧率和白平衡设置。当前阶段只负责可靠采集，不包含标定或目标识别。
+
+### 前置条件
+
+1. 在 Windows 安装海康机器人 MVS 客户端与 SDK（当前已验证版本：4.8.1）。
+2. 确认环境变量 `MVCAM_COMMON_RUNENV` 指向 MVS Development 目录；也可以在页面中手动填写官方 `MvImport` 目录。
+3. 关闭正在独占相机的 MVS 官方客户端或其他采集程序。
+
+仓库不会复制或分发官方 SDK 的 Python 文件、DLL、头文件或示例代码；运行时直接从本机 MVS 安装目录加载官方 Python 封装。
+
+### 连接冒烟
+
+```bash
+# 枚举配置中的相机、连接、获取一帧并保存测试照片
+python scripts/mvs_probe.py --snapshot
+```
+
+测试照片默认写入 `data/mvs/photos/`，该目录不纳入 Git。
+
+### 启动 Web 调试台
+
+```bash
+# 在项目根目录启动本地 Flask 服务
+python scripts/mvs_web.py
+```
+
+浏览器访问 `http://127.0.0.1:8765`。相机和输出配置保存在 `configs/mvs/camera.yaml`；页面中的 IP 只用于选择已经枚举出的设备，不会修改相机自身的网络配置。
+
+---
+
 ## 项目结构
 
 ```
@@ -108,6 +141,8 @@ vision_learning/
 │   ├── test.yaml              # 测试配置
 │   ├── export.yaml            # 模型导出配置
 │   ├── data/                  # 数据集配置（本地使用，不提交）
+│   ├── mvs/
+│   │   └── camera.yaml        # MVS 相机与采集配置
 │   └── yolo/
 │       └── xanylabeling/      # X-AnyLabeling 模型配置
 │
@@ -116,7 +151,8 @@ vision_learning/
 │   ├── validator.py           # 验证器
 │   ├── tester.py              # 测试器
 │   ├── evaluator.py           # 评估器
-│   └── exporter.py            # 导出器
+│   ├── exporter.py            # 导出器
+│   └── mvs/                   # MVS SDK 适配、采集服务与 Web 调试台
 │
 ├── tools/                     # 工具目录
 │   ├── data/                  # 数据处理工具
@@ -136,7 +172,9 @@ vision_learning/
 │   ├── setup_env.sh           # Linux/macOS 环境配置脚本
 │   ├── setup_env.bat          # Windows 环境配置脚本
 │   ├── quick_start.py         # 快速开始脚本
-│   └── download_data.py       # 数据集下载脚本
+│   ├── download_data.py       # 数据集下载脚本
+│   ├── mvs_probe.py           # MVS 设备与单帧冒烟检查
+│   └── mvs_web.py             # 启动 MVS 浏览器调试台
 │
 ├── examples/                  # 示例目录
 │   ├── train_example.py       # 训练示例

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MVS 相机调试</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <h1>MVS 相机调试</h1>
+        <p>相机连接、画面预览与采集参数设置</p>
+      </div>
+      <div class="connection-status" id="connection-pill">
+        <span class="status-dot"></span>
+        <span id="connection-text">未连接</span>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="panel connection-panel">
+        <div class="panel-title">
+          <h2>相机连接</h2>
+          <button class="button" id="scan-button" type="button">刷新设备</button>
+        </div>
+        <div class="form-grid connection-grid">
+          <div class="field device-field">
+            <label for="device-select">已发现设备</label>
+            <select id="device-select"><option value="">点击刷新枚举相机</option></select>
+          </div>
+          <div class="field">
+            <label for="camera-ip">相机 IP</label>
+            <input id="camera-ip" inputmode="decimal" autocomplete="off" placeholder="192.168.0.10">
+          </div>
+          <div class="field">
+            <label for="camera-serial">序列号</label>
+            <input id="camera-serial" autocomplete="off" placeholder="可留空">
+          </div>
+          <div class="field sdk-field">
+            <label for="sdk-path">SDK Python 封装路径（可留空）</label>
+            <input id="sdk-path" autocomplete="off" placeholder="自动从 MVCAM_COMMON_RUNENV 读取">
+          </div>
+          <div class="field timeout-field">
+            <label for="frame-timeout">取帧超时（ms）</label>
+            <input id="frame-timeout" type="number" min="100" max="30000" step="100">
+          </div>
+        </div>
+        <p class="help">IP 只用于选择已枚举的相机，不会修改相机网络配置。</p>
+        <div class="actions">
+          <button class="button" id="save-config-button" type="button">保存配置</button>
+          <button class="button primary" id="connect-button" type="button"><span>连接相机</span></button>
+        </div>
+      </section>
+
+      <section class="panel stage" aria-label="实时相机画面">
+        <div class="preview-header">
+          <div>
+            <h2>实时画面</h2>
+            <span id="device-name">等待相机</span>
+          </div>
+          <div class="metrics">
+            <span>分辨率 <b id="metric-resolution">—</b></span>
+            <span>帧率 <b id="metric-fps">0.0</b> FPS</span>
+            <span>丢包 <b id="metric-lost">0</b></span>
+          </div>
+        </div>
+        <div class="viewport" id="viewport">
+          <img id="preview-image" alt="MVS 相机实时画面">
+          <div class="empty-state" id="empty-state">连接相机后在这里显示实时画面</div>
+          <div class="recording-badge" id="recording-badge"><span></span>录像中</div>
+        </div>
+        <div class="event-strip">
+          <span id="event-time">--:--:--</span>
+          <p id="event-message" role="status" aria-live="polite">页面已就绪，等待操作。</p>
+        </div>
+      </section>
+
+      <div class="section-grid">
+        <div class="column">
+          <section class="panel capture-panel">
+            <h2>采集控制</h2>
+            <div class="actions capture-actions">
+              <button class="button primary" id="snapshot-button" type="button" disabled>手动拍照</button>
+              <button class="button" id="auto-button" type="button" disabled>开始自动拍照</button>
+              <button class="button danger" id="record-button" type="button" disabled><span>开始录像</span></button>
+            </div>
+            <dl class="file-status">
+              <dt>最近照片</dt><dd><code id="last-photo">—</code></dd>
+              <dt>录像文件</dt><dd><code id="recording-path">—</code></dd>
+            </dl>
+          </section>
+
+          <section class="panel output-panel">
+            <div class="panel-title"><h2>输出设置</h2></div>
+            <div class="form-grid two-columns">
+              <div class="field"><label for="photo-format">照片格式</label><select id="photo-format"><option value="jpg">JPG</option><option value="png">PNG</option><option value="bmp">BMP</option></select></div>
+              <div class="field"><label for="jpeg-quality">JPG 质量</label><input id="jpeg-quality" type="number" min="1" max="100"></div>
+              <div class="field full"><label for="photo-dir">照片目录</label><input id="photo-dir"></div>
+              <div class="field"><label for="auto-interval">自动拍照间隔（秒）</label><input id="auto-interval" type="number" min="0.2" step="0.1"></div>
+              <div class="field"><label for="video-format">视频格式</label><select id="video-format"><option value="mp4">MP4</option><option value="avi">AVI</option></select></div>
+              <div class="field"><label for="video-fps">录像帧率</label><input id="video-fps" type="number" min="0.1" step="0.1"></div>
+              <div class="field full"><label for="video-dir">视频目录</label><input id="video-dir"></div>
+            </div>
+            <button class="button" id="save-output-button" type="button">保存输出设置</button>
+          </section>
+        </div>
+
+        <section class="panel imaging-panel">
+          <h2>成像参数</h2>
+          <fieldset id="imaging-fields" disabled>
+            <div class="form-grid two-columns">
+              <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+              <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small></div>
+              <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+              <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
+              <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">限制采集帧率</label></div>
+              <div class="field"><label for="fps-value">采集帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small></div>
+              <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
+            </div>
+            <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
+          </fieldset>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>
