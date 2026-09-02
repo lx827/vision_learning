@@ -1,6 +1,6 @@
-# YOLOv8 阶段一学习项目
+# vision_learning
 
-> 从环境搭建到基础实践的完整 YOLOv8 学习框架
+> 面向 YOLO、OpenCV 与 MVS 的计算机视觉学习和工程实践仓库
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
@@ -12,9 +12,10 @@
 ## 目录
 
 - [项目简介](#项目简介)
-- [功能特性](#功能特性)
+- [当前功能](#当前功能)
 - [快速开始](#快速开始)
 - [项目结构](#项目结构)
+- [目录演进规划](#目录演进规划)
 - [文档](#文档)
 - [示例](#示例)
 - [贡献指南](#贡献指南)
@@ -24,18 +25,19 @@
 
 ## 项目简介
 
-本项目是 YOLOv8 阶段一学习项目，旨在帮助开发者快速搭建 YOLOv8 开发环境，掌握完整的训练工作流程。项目采用模块化设计，提供一键环境配置、训练、验证、测试、评估、导出等完整功能。
+`vision_learning` 是一个持续演进的计算机视觉学习与工程实践仓库，规划覆盖 YOLO 目标检测、OpenCV 图像处理和 MVS 相关实践。
+
+当前代码以 YOLOv8 学习成果为基础，已经包含环境配置、训练、验证、测试、评估和模型导出等流程。后续将在保留现有代码可用性的前提下，按主题逐步整理目录并补充 OpenCV 与 MVS 内容。
 
 **学习目标：**
-- 掌握 YOLOv8 环境搭建和配置
-- 熟悉训练、验证、测试、评估完整流程
-- 学会使用数据预处理工具
-- 掌握可视化分析方法
-- 了解模型导出和部署
+- 掌握 YOLO 模型的训练、验证、评估、导出与部署流程
+- 系统练习 OpenCV 图像处理和传统计算机视觉方法
+- 积累 MVS 相关开发、设备接入与视觉应用实践
+- 沉淀可复用的配置、工具、示例和实验记录
 
 ---
 
-## 功能特性
+## 当前功能
 
 - **一键环境配置**: 自动检测 CUDA、安装依赖、验证环境
 - **完整工作流程**: 训练 → 验证 → 测试 → 评估 → 导出
@@ -99,7 +101,7 @@ python src/evaluator.py --config configs/val.yaml
 ## 项目结构
 
 ```
-YOLO_learning/
+vision_learning/
 ├── configs/                    # 配置文件目录
 │   ├── train.yaml             # 训练配置
 │   ├── val.yaml               # 验证配置
@@ -168,6 +170,39 @@ YOLO_learning/
 ├── LICENSE                    # MIT 许可证
 └── README.md                  # 项目说明文档
 ```
+
+---
+
+## 目录演进规划
+
+为避免一次性移动代码造成导入路径和现有脚本失效，当前阶段只确定目录边界，不立即重构。后续按功能逐步迁移为：
+
+```text
+vision_learning/
+├── src/
+│   ├── yolo/                  # YOLO 训练、验证、评估、导出与推理
+│   ├── opencv/                # OpenCV 图像处理与传统视觉算法
+│   ├── mvs/                   # MVS 相关接入、采集与应用实践
+│   └── common/                # 跨方向复用的配置、日志和辅助能力
+├── configs/
+│   ├── yolo/
+│   ├── opencv/
+│   └── mvs/
+├── examples/
+│   ├── yolo/
+│   ├── opencv/
+│   └── mvs/
+├── tests/
+│   ├── yolo/
+│   ├── opencv/
+│   └── mvs/
+└── docs/
+    ├── yolo/
+    ├── opencv/
+    └── mvs/
+```
+
+迁移原则：一次只迁移一个可验证的功能单元；同步更新导入、配置、文档和测试；每次迁移后保持原有使用方式可追踪、变更可回退。
 
 ---
 
