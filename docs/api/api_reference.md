@@ -26,7 +26,7 @@ trainer = YOLOTrainer("configs/train.yaml")
 
 # 使用字典配置
 config = {
-    "model": {"name": "yolov8n.pt"},
+    "model": {"name": "weights/yolo/pytorch/yolov8n.pt"},
     "data": {"name": "coco128.yaml"},
     "train": {"epochs": 50, "batch": 16},
 }
@@ -74,7 +74,7 @@ validator = YOLOValidator("configs/val.yaml")
 
 # 使用字典配置
 config = {
-    "model": {"weights": "yolov8n.pt"},
+    "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
     "data": {"name": "coco128.yaml"},
     "val": {"batch": 32, "imgsz": 640},
 }
@@ -112,7 +112,7 @@ tester = YOLOTester("configs/test.yaml")
 
 # 使用字典配置
 config = {
-    "model": {"weights": "yolov8n.pt"},
+    "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
     "data": {"source": "data/images"},
     "test": {"imgsz": 640, "conf": 0.25},
 }
@@ -456,7 +456,7 @@ save_yaml(config, "configs/train_backup.yaml")
 
 ```yaml
 model:
-  name: yolov8n.pt          # 模型名称或路径
+  name: weights/yolo/pytorch/yolov8n.pt  # 模型名称或路径
 
 data:
   name: coco128.yaml        # 数据集配置文件

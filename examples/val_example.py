@@ -37,7 +37,7 @@ def example_custom_weights():
     # 使用字典配置
     config = {
         "model": {
-            "weights": "yolov8n.pt",  # 可以替换为自己的权重路径
+            "weights": "weights/yolo/pytorch/yolov8n.pt",  # 可以替换为自己的权重路径
         },
         "data": {
             "name": "coco128.yaml",
@@ -64,7 +64,11 @@ def example_batch_validation():
     print("示例 3: 批量验证（对比不同模型）")
     print("=" * 60)
 
-    models = ["yolov8n.pt", "yolov8s.pt", "yolov8m.pt"]
+    models = [
+        "weights/yolo/pytorch/yolov8n.pt",
+        "weights/yolo/pytorch/yolov8s.pt",
+        "weights/yolo/pytorch/yolov8m.pt",
+    ]
 
     results = {}
     for model_name in models:

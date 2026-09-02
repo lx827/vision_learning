@@ -78,7 +78,7 @@ pip install ultralytics
 from ultralytics import YOLO
 
 # 加载预训练模型
-model = YOLO('yolov8n.pt')
+model = YOLO('weights/yolo/pytorch/yolov8n.pt')
 
 # 图片推理
 results = model('path/to/image.jpg')
@@ -142,7 +142,7 @@ model.train(data='coco8-pose.yaml', epochs=100)
 #### 项目 2.4：目标跟踪
 
 ```python
-model = YOLO('yolov8n.pt')
+model = YOLO('weights/yolo/pytorch/yolov8n.pt')
 results = model.track(source='video.mp4', tracker='bytetrack.yaml')
 ```
 

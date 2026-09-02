@@ -156,7 +156,7 @@ echo ""
 read -p "是否下载 YOLOv8n 预训练权重? (y/n, 默认: y): " DOWNLOAD_WEIGHTS
 if [[ ! "$DOWNLOAD_WEIGHTS" =~ ^[Nn]$ ]]; then
     info "下载 YOLOv8n 预训练权重..."
-    python3 -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+    python3 -c "from ultralytics import YOLO; YOLO('weights/yolo/pytorch/yolov8n.pt')"
 fi
 
 # 创建必要目录
@@ -166,8 +166,8 @@ mkdir -p data
 mkdir -p runs/detect/train
 mkdir -p runs/detect/val
 mkdir -p runs/detect/test
-mkdir -p weights/pretrained
-mkdir -p weights/trained
+mkdir -p weights/yolo/pytorch
+mkdir -p weights/yolo/onnx
 
 # 完成
 echo ""

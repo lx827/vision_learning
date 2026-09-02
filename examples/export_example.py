@@ -20,7 +20,7 @@ def example_onnx_export():
     print("=" * 60)
 
     config = {
-        "model": {"weights": "yolov8n.pt"},
+        "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
         "export": {
             "project": "export",
             "name": "onnx_export",
@@ -46,7 +46,7 @@ def example_tensorrt_export():
     print("=" * 60)
 
     config = {
-        "model": {"weights": "yolov8n.pt"},
+        "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
         "export": {
             "project": "export",
             "name": "tensorrt_export",
@@ -76,7 +76,7 @@ def example_openvino_export():
     print("=" * 60)
 
     config = {
-        "model": {"weights": "yolov8n.pt"},
+        "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
         "export": {
             "project": "export",
             "name": "openvino_export",
@@ -103,7 +103,7 @@ def example_all_formats():
     print("=" * 60)
 
     config = {
-        "model": {"weights": "yolov8n.pt"},
+        "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
         "export": {
             "project": "export",
             "name": "all_formats",

@@ -59,7 +59,7 @@ class YOLOValidator(LoggerMixin):
         from ultralytics import YOLO
 
         model_config = self.config.get("model", {})
-        weights = model_config.get("weights", "yolov8n.pt")
+        weights = model_config.get("weights", "weights/yolo/pytorch/yolov8n.pt")
 
         self.logger.info(f"加载模型权重: {weights}")
         self.model = YOLO(weights)
@@ -78,7 +78,7 @@ class YOLOValidator(LoggerMixin):
 
         # 自动生成实验名（<模型>_<日期>），config 的 name 可手动覆盖
         model_config = self.config.get("model", {})
-        weights = model_config.get("weights", "yolov8n.pt")
+        weights = model_config.get("weights", "weights/yolo/pytorch/yolov8n.pt")
         run_name = resolve_run_name(
             val_config.get("name"),
             resolve_model_name(weights),

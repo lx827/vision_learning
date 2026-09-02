@@ -106,9 +106,10 @@ vision_learning/
 │   ├── train.yaml             # 训练配置
 │   ├── val.yaml               # 验证配置
 │   ├── test.yaml              # 测试配置
-│   └── data/                  # 数据集配置
-│       ├── coco128.yaml       # COCO128 数据集配置
-│       └── custom.yaml        # 自定义数据集模板
+│   ├── export.yaml            # 模型导出配置
+│   ├── data/                  # 数据集配置（本地使用，不提交）
+│   └── yolo/
+│       └── xanylabeling/      # X-AnyLabeling 模型配置
 │
 ├── src/                       # 源代码目录
 │   ├── trainer.py             # 训练器
@@ -162,7 +163,10 @@ vision_learning/
 │
 ├── data/                      # 数据目录（gitignore）
 ├── runs/                      # 运行输出目录（gitignore）
-├── weights/                   # 模型权重目录（gitignore）
+├── weights/                   # 本地模型文件（gitignore）
+│   └── yolo/
+│       ├── pytorch/           # PyTorch 权重（.pt）
+│       └── onnx/              # ONNX 导出模型（.onnx）
 │
 ├── .gitignore                 # Git 忽略文件
 ├── requirements.txt           # Python 依赖列表
@@ -170,6 +174,8 @@ vision_learning/
 ├── LICENSE                    # MIT 许可证
 └── README.md                  # 项目说明文档
 ```
+
+模型权重和导出文件体积较大，仅保存在本地 `weights/` 目录，不纳入 Git。仓库中只跟踪可复用的配置、代码和文档。
 
 ---
 

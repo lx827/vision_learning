@@ -29,7 +29,7 @@ class TestYOLOTrainer:
         config = {
             "model": {"name": "yolov8n.pt"},
             "data": {"name": "coco128.yaml"},
-            "train": {"epochs": 1, "batch": 1},
+            "train": {"epochs": 1, "batch": 1, "imgsz": 640},
         }
         trainer = YOLOTrainer(config)
         assert trainer.config == config
@@ -41,9 +41,8 @@ class TestYOLOTrainer:
             "data": {"name": "coco128.yaml"},
             "train": {"epochs": 1},
         }
-        trainer = YOLOTrainer(config)
-        # 如果配置无效，_validate_config 应该抛出异常
-        trainer._validate_config()
+        with pytest.raises(ValueError, match=r"train\.batch"):
+            YOLOTrainer(config)
 
     def test_get_train_args(self):
         """测试获取训练参数"""

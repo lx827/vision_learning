@@ -37,7 +37,7 @@ def example_video_test():
     print("=" * 60)
 
     config = {
-        "model": {"weights": "yolov8n.pt"},
+        "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
         "data": {"source": "path/to/video.mp4"},  # 修改为你的视频路径
         "test": {
             "imgsz": 640,
@@ -63,7 +63,7 @@ def example_camera_test():
     print("=" * 60)
 
     config = {
-        "model": {"weights": "yolov8n.pt"},
+        "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
         "test": {
             "imgsz": 640,
             "conf": 0.25,
@@ -88,7 +88,7 @@ def example_batch_test():
     print("=" * 60)
 
     config = {
-        "model": {"weights": "yolov8n.pt"},
+        "model": {"weights": "weights/yolo/pytorch/yolov8n.pt"},
         "data": {"source": "data/images"},  # 修改为你的图片目录
         "test": {
             "imgsz": 640,

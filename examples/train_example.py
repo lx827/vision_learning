@@ -40,7 +40,7 @@ def example_custom_config():
     # 使用字典配置
     config = {
         "model": {
-            "name": "yolov8n.pt",
+            "name": "weights/yolo/pytorch/yolov8n.pt",
         },
         "data": {
             "name": "coco128.yaml",
@@ -86,7 +86,11 @@ def example_model_comparison():
     print("示例 4: 模型对比（n/s/m）")
     print("=" * 60)
 
-    models = ["yolov8n.pt", "yolov8s.pt", "yolov8m.pt"]
+    models = [
+        "weights/yolo/pytorch/yolov8n.pt",
+        "weights/yolo/pytorch/yolov8s.pt",
+        "weights/yolo/pytorch/yolov8m.pt",
+    ]
 
     for model_name in models:
         print(f"\n训练模型: {model_name}")

@@ -1,11 +1,11 @@
-# X-AnyLabeling 自定义模型配置：COCO 预训练 YOLOv8n（80 类）
+# X-AnyLabeling 自定义模型配置：COCO 预训练 YOLOv8x（80 类）
 # 用法：X-AnyLabeling 左侧 AI 图标 → 加载自定义模型 → 选这个 yaml
-# 注意：需要先执行 yolo export model=yolov8n.pt format=onnx 生成 yolov8n.onnx
+# ONNX 模型统一存放在 weights/yolo/onnx/
 type: yolov8
-name: yolov8n-coco
+name: yolov8x-coco
 provider: Ultralytics
-display_name: YOLOv8n COCO 80类
-model_path: e:/A-codehub/Yolo_learning/yolov8n.onnx
+display_name: YOLOv8x COCO 80类
+model_path: E:/A-codehub/vision_learning/weights/yolo/onnx/yolov8x.onnx
 confidence_threshold: 0.4
 iou_threshold: 0.45
 filter_classes:

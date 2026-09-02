@@ -71,7 +71,7 @@ class YOLOExporter(LoggerMixin):
         from ultralytics import YOLO
 
         model_config = self.config.get("model", {})
-        weights = model_config.get("weights", "yolov8n.pt")
+        weights = model_config.get("weights", "weights/yolo/pytorch/yolov8n.pt")
 
         self.logger.info(f"加载模型权重: {weights}")
         self.model = YOLO(weights)

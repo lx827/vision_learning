@@ -141,7 +141,7 @@ echo.
 set /p DOWNLOAD_WEIGHTS="是否下载 YOLOv8n 预训练权重? (y/n, 默认: y): "
 if /i "%DOWNLOAD_WEIGHTS%"=="n" goto :skip_download
 echo [信息] 下载 YOLOv8n 预训练权重...
-python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+python -c "from ultralytics import YOLO; YOLO('weights/yolo/pytorch/yolov8n.pt')"
 :skip_download
 
 ::: 创建必要目录
@@ -153,8 +153,8 @@ if not exist "runs\detect\train" mkdir runs\detect\train
 if not exist "runs\detect\val" mkdir runs\detect\val
 if not exist "runs\detect\test" mkdir runs\detect\test
 if not exist "weights" mkdir weights
-if not exist "weights\pretrained" mkdir weights\pretrained
-if not exist "weights\trained" mkdir weights\trained
+if not exist "weights\yolo\pytorch" mkdir weights\yolo\pytorch
+if not exist "weights\yolo\onnx" mkdir weights\yolo\onnx
 
 ::: 完成
 echo.

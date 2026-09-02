@@ -85,7 +85,7 @@ class YOLOTrainer(LoggerMixin):
         from ultralytics import YOLO
 
         model_config = self.config.get("model", {})
-        model_name = model_config.get("name", "yolov8n.pt")
+        model_name = model_config.get("name", "weights/yolo/pytorch/yolov8n.pt")
 
         self.logger.info(f"加载模型: {model_name}")
         self.model = YOLO(model_name)
@@ -106,7 +106,7 @@ class YOLOTrainer(LoggerMixin):
 
         # 自动生成实验名（<数据集>_<模型>_e<轮数>_<日期>），config 的 name 可手动覆盖
         model_config = self.config.get("model", {})
-        model_name = model_config.get("name", "yolov8n.pt")
+        model_name = model_config.get("name", "weights/yolo/pytorch/yolov8n.pt")
         run_name = resolve_run_name(
             train_config.get("name"),
             Path(data_yaml).stem,
