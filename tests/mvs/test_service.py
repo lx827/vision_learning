@@ -3,12 +3,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 
 from src.mvs.config import MvsAppConfig, MvsConfigStore
 from src.mvs.sdk import FloatFeature, Frame, MvsDeviceInfo, MvsError
-from src.mvs.service import MvsCameraService, _diagnose_frame_rate
+from src.mvs.service import MvsCameraService, _diagnose_frame_rate, _resize_to_fit
 
 
 class FakeCamera:
@@ -53,6 +54,10 @@ class FakeCamera:
     def apply_parameters(self, values):
         return {**self.parameters, "applied": values}
 
+    def apply_roi(self, values):
+        self.parameters = {**self.parameters, "applied_roi": values}
+        return self.parameters
+
     def close(self):
         self.connected = False
 
@@ -89,6 +94,51 @@ def test_auto_capture_requires_connection(tmp_path: Path):
 
     with pytest.raises(MvsError, match="请先连接相机"):
         service.start_auto_capture()
+
+
+def test_output_resize_keeps_aspect_ratio_and_does_not_upscale():
+    frame = np.zeros((700, 1400, 3), dtype=np.uint8)
+
+    resized = _resize_to_fit(frame, max_width=1000, max_height=1000)
+    untouched = _resize_to_fit(resized, max_width=2000, max_height=2000)
+
+    assert resized.shape == (500, 1000, 3)
+    assert untouched is resized
+
+
+def test_apply_roi_is_forwarded_to_camera(tmp_path: Path):
+    service = make_service(tmp_path)
+    try:
+        service.connect()
+        result = service.apply_roi(
+            {"width": 32, "height": 24, "offset_x": 8, "offset_y": 4}
+        )
+    finally:
+        service.disconnect()
+
+    assert result["applied_roi"] == {
+        "width": 32,
+        "height": 24,
+        "offset_x": 8,
+        "offset_y": 4,
+    }
+
+
+def test_snapshot_uses_shared_output_bounds(tmp_path: Path):
+    service = make_service(tmp_path)
+    config = service.config.to_dict()
+    config["capture"]["output_max_width"] = 32
+    config["capture"]["output_max_height"] = 32
+    service.update_config(config)
+    try:
+        service.connect()
+        service.wait_for_jpeg(0, timeout=1.0)
+        snapshot = Path(service.save_snapshot())
+    finally:
+        service.disconnect()
+
+    image = cv2.imread(str(snapshot))
+    assert image.shape[:2] == (24, 32)
 
 
 def test_frame_rate_warning_explains_large_gige_frames():

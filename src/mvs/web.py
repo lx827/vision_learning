@@ -72,6 +72,10 @@ def create_app(
     def set_camera_parameters():
         return _ok(parameters=camera_service.apply_parameters(_json_body()))
 
+    @app.put("/api/camera/roi")
+    def set_camera_roi():
+        return _ok(parameters=camera_service.apply_roi(_json_body()))
+
     @app.post("/api/capture/snapshot")
     def snapshot():
         return _ok(path=camera_service.save_snapshot())

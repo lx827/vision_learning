@@ -34,5 +34,15 @@ def test_invalid_camera_ip_is_rejected():
 
 
 def test_invalid_video_size_is_rejected():
-    with pytest.raises(ValueError, match="录像最大宽高"):
+    with pytest.raises(ValueError, match="输出最大宽高"):
         MvsAppConfig.from_dict({"capture": {"video_max_width": 1}})
+
+
+def test_legacy_video_bounds_are_migrated_to_shared_output_bounds():
+    config = MvsAppConfig.from_dict(
+        {"capture": {"video_max_width": 1280, "video_max_height": 720}}
+    )
+
+    assert config.capture.output_max_width == 1280
+    assert config.capture.output_max_height == 720
+    assert "video_max_width" not in config.to_dict()["capture"]

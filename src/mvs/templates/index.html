@@ -61,7 +61,8 @@
             <span id="device-name">等待相机</span>
           </div>
           <div class="metrics">
-            <span>分辨率 <b id="metric-resolution">—</b></span>
+            <span>采集 <b id="metric-resolution">—</b></span>
+            <span>预览 <b id="metric-preview-resolution">—</b></span>
             <span>帧率 <b id="metric-fps">0.0</b> FPS</span>
             <span>丢包 <b id="metric-lost">0</b></span>
           </div>
@@ -106,28 +107,47 @@
               <div class="field"><label for="auto-interval">自动拍照间隔（秒）</label><input id="auto-interval" type="number" min="0.2" step="0.1"></div>
               <div class="field"><label for="video-format">视频格式</label><select id="video-format"><option value="mp4">MP4</option><option value="avi">AVI</option></select></div>
               <div class="field full"><label for="video-dir">视频目录</label><input id="video-dir"></div>
+              <div class="field"><label for="output-max-width">输出最大宽度（px）</label><input id="output-max-width" type="number" min="2" step="1"></div>
+              <div class="field"><label for="output-max-height">输出最大高度（px）</label><input id="output-max-height" type="number" min="2" step="1"></div>
             </div>
-            <p class="help">录像帧率自动跟随相机的采集帧率，不再单独设置。超大画面录像会等比例缩小到 1920×1080 范围。</p>
+            <p class="help">输出宽高只缩小网页预览、照片和录像，不裁剪取景范围，也不会放大小图；程序会保持原始宽高比例放入这个范围。</p>
             <button class="button" id="save-output-button" type="button">保存输出设置</button>
           </section>
         </div>
 
-        <section class="panel imaging-panel">
-          <h2>成像参数</h2>
-          <fieldset id="imaging-fields" disabled>
-            <div class="form-grid two-columns">
-              <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
-              <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small></div>
-              <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
-              <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
-              <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">启用帧率限制</label></div>
-              <div class="field"><label for="fps-value">采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small></div>
-              <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
-            </div>
-            <p class="help">启用并应用后，录像文件自动使用相机返回的同一帧率；设备或处理速度不足时会保留时长并重复缺失帧。</p>
-            <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
-          </fieldset>
-        </section>
+        <div class="column">
+          <section class="panel imaging-panel">
+            <h2>成像参数</h2>
+            <fieldset id="imaging-fields" disabled>
+              <div class="form-grid two-columns">
+                <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small></div>
+                <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+                <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
+                <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">启用帧率限制</label></div>
+                <div class="field"><label for="fps-value">采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small></div>
+                <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
+              </div>
+              <p class="help">启用并应用后，录像文件自动使用相机返回的同一帧率；设备或处理速度不足时会在页面明确提示。</p>
+              <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
+            </fieldset>
+          </section>
+
+          <section class="panel roi-panel">
+            <h2>相机采集 ROI</h2>
+            <fieldset id="roi-fields" disabled>
+              <div class="form-grid two-columns">
+                <div class="field"><label for="roi-width">采集宽度（px）</label><input id="roi-width" type="number"><small id="roi-width-range">—</small></div>
+                <div class="field"><label for="roi-height">采集高度（px）</label><input id="roi-height" type="number"><small id="roi-height-range">—</small></div>
+                <div class="field"><label for="roi-offset-x">水平偏移 X（px）</label><input id="roi-offset-x" type="number"><small id="roi-offset-x-range">—</small></div>
+                <div class="field"><label for="roi-offset-y">垂直偏移 Y（px）</label><input id="roi-offset-y" type="number"><small id="roi-offset-y-range">—</small></div>
+                <div class="field checkbox-field full"><input id="roi-centered" type="checkbox" checked><label for="roi-centered">自动将 ROI 放在传感器中央</label></div>
+              </div>
+              <p class="help">ROI 会让相机只采集指定区域，能够真正减少传输和处理数据。应用时会短暂停止并自动恢复取流；录像或自动拍照期间不可修改。</p>
+              <button class="button primary" id="apply-roi-button" type="button">应用相机 ROI</button>
+            </fieldset>
+          </section>
+        </div>
       </div>
     </main>
   </div>

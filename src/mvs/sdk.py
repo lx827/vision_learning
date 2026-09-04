@@ -60,6 +60,17 @@ class FloatFeature:
 
 
 @dataclass(frozen=True)
+class IntegerFeature:
+    value: int
+    minimum: int
+    maximum: int
+    increment: int
+
+    def to_dict(self) -> dict[str, int]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class Frame:
     image: np.ndarray
     number: int
@@ -339,6 +350,19 @@ class MvsCamera:
                 )
             except MvsOperationError:
                 result["capabilities"]["frame_rate_enabled"] = False
+            for output_name, node in (
+                ("width", "Width"),
+                ("height", "Height"),
+                ("offset_x", "OffsetX"),
+                ("offset_y", "OffsetY"),
+            ):
+                try:
+                    result[output_name] = self._get_int(node).to_dict()
+                    # 多数相机在取流期间会把 ROI 节点临时标成只读；
+                    # 实际应用时会先停流，再由 SDK 校验是否可写。
+                    result["capabilities"][output_name] = True
+                except MvsOperationError:
+                    result["capabilities"][output_name] = False
             return result
 
     def apply_parameters(self, values: dict[str, Any]) -> dict[str, Any]:
@@ -361,6 +385,91 @@ class MvsCamera:
             if "white_balance_mode" in values:
                 self._set_mode("BalanceWhiteAuto", values["white_balance_mode"])
             return self.get_parameters()
+
+    def apply_roi(self, values: dict[str, Any]) -> dict[str, Any]:
+        """停流后设置相机 ROI，再恢复连续取流。"""
+        allowed = {"width", "height", "offset_x", "offset_y", "centered"}
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise ValueError(f"未知 ROI 参数：{', '.join(unknown)}")
+        if "width" not in values or "height" not in values:
+            raise ValueError("ROI 必须同时提供宽度和高度")
+
+        with self._lock:
+            sdk, camera = self._require_open()
+            was_grabbing = self._grabbing
+            if was_grabbing:
+                _check(camera.MV_CC_StopGrabbing(), "修改 ROI 前停止取流")
+                self._grabbing = False
+            try:
+                # 先清零偏移，否则增大 Width/Height 时可能超过传感器边界。
+                for node in ("OffsetX", "OffsetY"):
+                    if self._is_writable(node):
+                        self._set_int(node, 0)
+
+                self._set_validated_int("Width", values["width"])
+                self._set_validated_int("Height", values["height"])
+
+                centered = bool(values.get("centered", False))
+                for key, node in (("offset_x", "OffsetX"), ("offset_y", "OffsetY")):
+                    feature = self._get_int(node)
+                    if not self._is_writable(node):
+                        continue
+                    requested = (
+                        self._aligned_center(feature)
+                        if centered
+                        else values.get(key, feature.minimum)
+                    )
+                    self._set_validated_int(node, requested)
+            finally:
+                if was_grabbing:
+                    _check(camera.MV_CC_StartGrabbing(), "修改 ROI 后恢复取流")
+                    self._grabbing = True
+            return self.get_parameters()
+
+    @staticmethod
+    def _aligned_center(feature: IntegerFeature) -> int:
+        increment = max(1, feature.increment)
+        midpoint = (feature.minimum + feature.maximum) // 2
+        return feature.minimum + ((midpoint - feature.minimum) // increment) * increment
+
+    def _get_int(self, node: str) -> IntegerFeature:
+        sdk, camera = self._require_open()
+        value = sdk.MVCC_INTVALUE_EX()
+        memset(byref(value), 0, sizeof(value))
+        _check(camera.MV_CC_GetIntValueEx(node, value), f"读取 {node}")
+        return IntegerFeature(
+            int(value.nCurValue),
+            int(value.nMin),
+            int(value.nMax),
+            max(1, int(value.nInc)),
+        )
+
+    def _set_int(self, node: str, value: Any) -> None:
+        _, camera = self._require_open()
+        if isinstance(value, bool):
+            raise ValueError(f"{node} 必须是整数")
+        numeric = int(value)
+        if numeric != float(value):
+            raise ValueError(f"{node} 必须是整数")
+        _check(camera.MV_CC_SetIntValueEx(node, numeric), f"设置 {node}")
+
+    def _set_validated_int(self, node: str, value: Any) -> None:
+        feature = self._get_int(node)
+        if isinstance(value, bool):
+            raise ValueError(f"{node} 必须是整数")
+        numeric = int(value)
+        if numeric != float(value):
+            raise ValueError(f"{node} 必须是整数")
+        if not feature.minimum <= numeric <= feature.maximum:
+            raise ValueError(
+                f"{node} 必须在 {feature.minimum}～{feature.maximum} 之间"
+            )
+        if (numeric - feature.minimum) % feature.increment:
+            raise ValueError(
+                f"{node} 必须按步长 {feature.increment} 从 {feature.minimum} 递增"
+            )
+        self._set_int(node, numeric)
 
     def _get_float(self, node: str) -> FloatFeature:
         sdk, camera = self._require_open()
@@ -457,6 +566,7 @@ class MvsCamera:
 __all__ = [
     "FloatFeature",
     "Frame",
+    "IntegerFeature",
     "MvsCamera",
     "MvsDeviceInfo",
     "MvsError",

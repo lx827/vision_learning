@@ -20,6 +20,9 @@ class FakeWebService:
         self.config = MvsAppConfig.from_dict(payload)
         return self.config.to_dict()
 
+    def apply_roi(self, payload):
+        return {"applied_roi": payload}
+
 
 def test_health_devices_and_config_api():
     app = create_app(service=FakeWebService())
@@ -40,6 +43,22 @@ def test_mvs_error_is_returned_as_json():
 
     assert response.status_code == 400
     assert response.get_json() == {"ok": False, "error": "测试连接失败"}
+
+
+def test_roi_api_forwards_camera_coordinates():
+    app = create_app(service=FakeWebService())
+
+    response = app.test_client().put(
+        "/api/camera/roi",
+        json={"width": 2048, "height": 2048, "centered": True},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["parameters"]["applied_roi"] == {
+        "width": 2048,
+        "height": 2048,
+        "centered": True,
+    }
 
 
 def test_unknown_route_remains_not_found():

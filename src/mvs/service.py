@@ -20,6 +20,21 @@ _FPS_WARNING_RATIO = 0.9
 _FPS_MIN_SAMPLES = 5
 
 
+def _resize_to_fit(
+    frame: np.ndarray, *, max_width: int, max_height: int
+) -> np.ndarray:
+    """等比例缩小图像以适应输出边界，不放大较小的原图。"""
+    height, width = frame.shape[:2]
+    scale = min(1.0, max_width / width, max_height / height)
+    if scale >= 1.0:
+        return frame
+    target = (
+        max(1, int(round(width * scale))),
+        max(1, int(round(height * scale))),
+    )
+    return cv2.resize(frame, target, interpolation=cv2.INTER_AREA)
+
+
 def _diagnose_frame_rate(
     *,
     actual_fps: float,
@@ -120,6 +135,7 @@ class MvsCameraService:
         self._latest_sequence = 0
         self._latest_frame_number = 0
         self._latest_size = (0, 0)
+        self._preview_size = (0, 0)
         self._lost_packets = 0
         self._frame_times: deque[float] = deque(maxlen=60)
         self._connected = False
@@ -212,6 +228,7 @@ class MvsCameraService:
                 self._latest_jpeg = None
                 self._latest_frame_number = 0
                 self._latest_size = (0, 0)
+                self._preview_size = (0, 0)
                 self._camera_parameters = {}
                 self._lost_packets = 0
                 self._frame_times.clear()
@@ -253,12 +270,35 @@ class MvsCameraService:
             self._camera_parameters = parameters
         return parameters
 
+    def apply_roi(self, values: dict[str, Any]) -> dict[str, Any]:
+        """应用相机端 ROI；该操作只改变采集区域，不负责输出缩放。"""
+        with self._operation_lock:
+            with self._lock:
+                if self._recording or self._auto_capture:
+                    raise MvsError("修改 ROI 前请先停止录像和自动拍照")
+            camera = self._require_camera()
+            parameters = camera.apply_roi(values)
+            with self._frame_condition:
+                self._camera_parameters = parameters
+                self._latest_frame = None
+                self._latest_jpeg = None
+                self._latest_size = (0, 0)
+                self._preview_size = (0, 0)
+                self._frame_times.clear()
+                self._frame_condition.notify_all()
+            return parameters
+
     def save_snapshot(self) -> str:
         with self._lock:
             if self._latest_frame is None:
                 raise MvsError("尚未收到相机画面，无法拍照")
             frame = self._latest_frame.copy()
             config = self._config.capture
+        frame = _resize_to_fit(
+            frame,
+            max_width=config.output_max_width,
+            max_height=config.output_max_height,
+        )
         path = self._save_photo(frame, config.photo_format, config.jpeg_quality)
         with self._lock:
             self._last_photo = str(path)
@@ -313,8 +353,8 @@ class MvsCameraService:
                 path,
                 video_format=config.video_format,
                 fps=recording_fps,
-                max_width=config.video_max_width,
-                max_height=config.video_max_height,
+                max_width=config.output_max_width,
+                max_height=config.output_max_height,
             )
             self._recording_fps = recording_fps
             self._recording = True
@@ -345,6 +385,7 @@ class MvsCameraService:
                 if elapsed > 0:
                     fps = (len(self._frame_times) - 1) / elapsed
             width, height = self._latest_size
+            preview_width, preview_height = self._preview_size
             target_feature = self._camera_parameters.get("frame_rate") or {}
             target_fps = float(target_feature.get("value", self._recording_fps))
             exposure_feature = self._camera_parameters.get("exposure_us") or {}
@@ -380,6 +421,8 @@ class MvsCameraService:
                 "frame_number": self._latest_frame_number,
                 "width": width,
                 "height": height,
+                "preview_width": preview_width,
+                "preview_height": preview_height,
                 "lost_packets": self._lost_packets,
                 "device": self._device.to_dict() if self._device else None,
             }
@@ -408,9 +451,14 @@ class MvsCameraService:
             self._stop_video_recorder(raise_errors=False)
 
     def _publish_frame(self, frame: Frame) -> None:
-        quality = self._config.capture.preview_quality
+        config = self._config.capture
+        preview = _resize_to_fit(
+            frame.image,
+            max_width=config.output_max_width,
+            max_height=config.output_max_height,
+        )
         ok, encoded = cv2.imencode(
-            ".jpg", frame.image, [cv2.IMWRITE_JPEG_QUALITY, quality]
+            ".jpg", preview, [cv2.IMWRITE_JPEG_QUALITY, config.preview_quality]
         )
         if not ok:
             raise MvsError("实时预览 JPEG 编码失败")
@@ -421,6 +469,7 @@ class MvsCameraService:
             self._latest_sequence += 1
             self._latest_frame_number = frame.number
             self._latest_size = (frame.width, frame.height)
+            self._preview_size = (preview.shape[1], preview.shape[0])
             self._lost_packets = frame.lost_packets
             self._frame_times.append(now)
             self._frame_condition.notify_all()
@@ -432,6 +481,11 @@ class MvsCameraService:
             config = self._config.capture
             self._next_auto_capture = time.monotonic() + config.auto_interval_seconds
         try:
+            frame = _resize_to_fit(
+                frame,
+                max_width=config.output_max_width,
+                max_height=config.output_max_height,
+            )
             path = self._save_photo(frame, config.photo_format, config.jpeg_quality)
             with self._lock:
                 self._last_photo = str(path)

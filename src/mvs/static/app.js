@@ -17,6 +17,7 @@ const elements = {
   preview: $("preview-image"),
   deviceSelect: $("device-select"),
   imagingFields: $("imaging-fields"),
+  roiFields: $("roi-fields"),
   connectButton: $("connect-button"),
   snapshotButton: $("snapshot-button"),
   autoButton: $("auto-button"),
@@ -90,6 +91,8 @@ function fillConfig(config) {
   $("jpeg-quality").value = config.capture.jpeg_quality;
   $("auto-interval").value = config.capture.auto_interval_seconds;
   $("video-format").value = config.capture.video_format;
+  $("output-max-width").value = config.capture.output_max_width;
+  $("output-max-height").value = config.capture.output_max_height;
 }
 
 function collectConfig() {
@@ -108,6 +111,8 @@ function collectConfig() {
       jpeg_quality: numberValue("jpeg-quality"),
       auto_interval_seconds: numberValue("auto-interval"),
       video_format: $("video-format").value,
+      output_max_width: numberValue("output-max-width"),
+      output_max_height: numberValue("output-max-height"),
       preview_quality: state.config?.capture.preview_quality ?? 80,
     },
     server: state.config?.server || { host: "127.0.0.1", port: 8765 },
@@ -198,12 +203,14 @@ function updateStatus(status) {
   elements.autoButton.disabled = !connected;
   elements.recordButton.disabled = !connected;
   elements.imagingFields.disabled = !connected;
+  elements.roiFields.disabled = !connected;
   elements.autoButton.textContent = status.auto_capture ? "停止自动拍照" : "开始自动拍照";
   elements.recordButton.querySelector("span").textContent = status.recording ? "停止录像" : "开始录像";
   elements.recordButton.classList.toggle("active", Boolean(status.recording));
   elements.recordingBadge.classList.toggle("active", Boolean(status.recording));
   $("device-name").textContent = status.device ? `${status.device.model} / ${status.device.serial}` : "等待相机";
   $("metric-resolution").textContent = status.width ? `${status.width} × ${status.height}` : "—";
+  $("metric-preview-resolution").textContent = status.preview_width ? `${status.preview_width} × ${status.preview_height}` : "—";
   $("metric-fps").textContent = Number(status.fps || 0).toFixed(1);
   $("metric-lost").textContent = status.lost_packets || 0;
   $("last-photo").textContent = status.last_photo || "—";
@@ -253,6 +260,21 @@ function applyFeature(id, feature, rangeId) {
   if (rangeId) $(rangeId).textContent = `${feature.minimum.toFixed(2)} — ${feature.maximum.toFixed(2)}`;
 }
 
+function applyIntegerFeature(id, feature, rangeId) {
+  const input = $(id);
+  const supported = Boolean(feature);
+  input.disabled = !supported;
+  if (!supported) {
+    $(rangeId).textContent = "相机不支持";
+    return;
+  }
+  input.value = feature.value;
+  input.min = feature.minimum;
+  input.max = feature.maximum;
+  input.step = feature.increment;
+  $(rangeId).textContent = `${feature.minimum} — ${feature.maximum}，步长 ${feature.increment}`;
+}
+
 async function loadParameters() {
   const payload = await api("/api/camera/parameters");
   const p = payload.parameters;
@@ -260,6 +282,10 @@ async function loadParameters() {
   applyFeature("exposure-value", p.exposure_us, "exposure-range");
   applyFeature("gain-value", p.gain_db, "gain-range");
   applyFeature("fps-value", p.frame_rate, "fps-range");
+  applyIntegerFeature("roi-width", p.width, "roi-width-range");
+  applyIntegerFeature("roi-height", p.height, "roi-height-range");
+  applyIntegerFeature("roi-offset-x", p.offset_x, "roi-offset-x-range");
+  applyIntegerFeature("roi-offset-y", p.offset_y, "roi-offset-y-range");
   $("exposure-mode").disabled = !p.capabilities.exposure_mode;
   $("gain-mode").disabled = !p.capabilities.gain_mode;
   $("white-balance-mode").disabled = !p.capabilities.white_balance_mode;
@@ -269,6 +295,7 @@ async function loadParameters() {
   if (p.white_balance_mode) $("white-balance-mode").value = p.white_balance_mode;
   $("fps-enabled").checked = Boolean(p.frame_rate_enabled);
   syncParameterControls();
+  syncRoiControls();
 }
 
 function syncParameterControls() {
@@ -277,6 +304,13 @@ function syncParameterControls() {
   $("exposure-value").disabled = !connected || !capabilities.exposure_us || (capabilities.exposure_mode && $("exposure-mode").value !== "off");
   $("gain-value").disabled = !connected || !capabilities.gain_db || (capabilities.gain_mode && $("gain-mode").value !== "off");
   $("fps-value").disabled = !connected || !capabilities.frame_rate || (capabilities.frame_rate_enabled && !$("fps-enabled").checked);
+}
+
+function syncRoiControls() {
+  const centered = $("roi-centered").checked;
+  const capabilities = state.parameters?.capabilities || {};
+  $("roi-offset-x").disabled = centered || !capabilities.offset_x;
+  $("roi-offset-y").disabled = centered || !capabilities.offset_y;
 }
 
 async function applyParameters() {
@@ -294,6 +328,29 @@ async function applyParameters() {
   showToast("成像参数已应用");
   logEvent("曝光、增益、帧率和白平衡设置已写入相机。");
   return payload.parameters;
+}
+
+async function applyRoi() {
+  const capabilities = state.parameters?.capabilities || {};
+  if (!capabilities.width || !capabilities.height) {
+    throw new Error("当前相机不支持修改采集宽度或高度");
+  }
+  const centered = $("roi-centered").checked;
+  const values = {
+    width: numberValue("roi-width"),
+    height: numberValue("roi-height"),
+    centered,
+  };
+  if (!centered) {
+    if (capabilities.offset_x) values.offset_x = numberValue("roi-offset-x");
+    if (capabilities.offset_y) values.offset_y = numberValue("roi-offset-y");
+  }
+  const payload = await api("/api/camera/roi", { method: "PUT", body: JSON.stringify(values) });
+  state.parameters = payload.parameters;
+  await loadParameters();
+  await pollStatus();
+  showToast("相机 ROI 已应用");
+  logEvent(`相机采集 ROI 已设为 ${values.width} × ${values.height}${centered ? "，并已居中" : ""}。`);
 }
 
 async function takeSnapshot() {
@@ -344,9 +401,11 @@ function bindEvents() {
   elements.autoButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleAutoCapture).catch(() => {}));
   elements.recordButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleRecording).catch(() => {}));
   $("apply-parameters-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyParameters).catch(() => {}));
+  $("apply-roi-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyRoi).catch(() => {}));
   $("exposure-mode").addEventListener("change", syncParameterControls);
   $("gain-mode").addEventListener("change", syncParameterControls);
   $("fps-enabled").addEventListener("change", syncParameterControls);
+  $("roi-centered").addEventListener("change", syncRoiControls);
   elements.preview.addEventListener("error", () => {
     if (state.status.connected) logEvent("实时预览中断，正在等待重新连接。", true);
   });
@@ -365,6 +424,10 @@ async function initialize() {
     const [configPayload, statusPayload] = await Promise.all([api("/api/config"), api("/api/camera/status")]);
     fillConfig(configPayload.config);
     updateStatus(statusPayload.status);
+    if (statusPayload.status.connected) {
+      startPreview();
+      await loadParameters();
+    }
     await withBusy($("scan-button"), scanDevices);
   } catch (error) {
     showToast(error.message, true);
