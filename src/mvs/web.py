@@ -76,6 +76,15 @@ def create_app(
     def set_camera_roi():
         return _ok(parameters=camera_service.apply_roi(_json_body()))
 
+    @app.put("/api/processing-region")
+    def set_processing_region():
+        return _ok(region=camera_service.set_processing_region(_json_body()))
+
+    @app.delete("/api/processing-region")
+    def clear_processing_region():
+        camera_service.clear_processing_region()
+        return _ok(region=None)
+
     @app.post("/api/capture/snapshot")
     def snapshot():
         return _ok(path=camera_service.save_snapshot())

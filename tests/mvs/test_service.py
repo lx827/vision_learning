@@ -141,6 +141,46 @@ def test_snapshot_uses_shared_output_bounds(tmp_path: Path):
     assert image.shape[:2] == (24, 32)
 
 
+def test_processing_region_keeps_full_frame_and_is_cleared_by_camera_roi(tmp_path: Path):
+    service = make_service(tmp_path)
+    try:
+        service.connect()
+        service.wait_for_jpeg(0, timeout=1.0)
+        region = service.set_processing_region(
+            {"x": 10, "y": 8, "width": 30, "height": 20}
+        )
+        before_roi = service.status()
+        service.apply_roi({"width": 32, "height": 24, "centered": True})
+        after_roi = service.status()
+    finally:
+        service.disconnect()
+
+    assert region == {
+        "x": 10,
+        "y": 8,
+        "width": 30,
+        "height": 20,
+        "source_width": 64,
+        "source_height": 48,
+    }
+    assert (before_roi["width"], before_roi["height"]) == (64, 48)
+    assert before_roi["processing_region"] == region
+    assert after_roi["processing_region"] is None
+
+
+def test_processing_region_cannot_exceed_current_frame(tmp_path: Path):
+    service = make_service(tmp_path)
+    try:
+        service.connect()
+        service.wait_for_jpeg(0, timeout=1.0)
+        with pytest.raises(ValueError, match="不能超过"):
+            service.set_processing_region(
+                {"x": 50, "y": 10, "width": 20, "height": 20}
+            )
+    finally:
+        service.disconnect()
+
+
 def test_frame_rate_warning_explains_large_gige_frames():
     diagnostic = _diagnose_frame_rate(
         actual_fps=2.23,

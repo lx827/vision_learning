@@ -7,6 +7,11 @@ const state = {
   scanPromise: null,
   fpsWarningActive: false,
   lastError: "",
+  drawing: false,
+  dragStart: null,
+  dragRegion: null,
+  draftRegion: null,
+  processingRegion: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -15,6 +20,11 @@ const elements = {
   connectionPill: $("connection-pill"),
   connectionText: $("connection-text"),
   preview: $("preview-image"),
+  viewport: $("viewport"),
+  selectionLayer: $("selection-layer"),
+  cameraRegionBox: $("camera-region-box"),
+  processingRegionBox: $("processing-region-box"),
+  draftRegionBox: $("draft-region-box"),
   deviceSelect: $("device-select"),
   imagingFields: $("imaging-fields"),
   roiFields: $("roi-fields"),
@@ -23,6 +33,9 @@ const elements = {
   autoButton: $("auto-button"),
   recordButton: $("record-button"),
   recordingBadge: $("recording-badge"),
+  drawRegionButton: $("draw-region-button"),
+  applyRegionButton: $("apply-region-button"),
+  clearRegionButton: $("clear-region-button"),
   toast: $("toast"),
 };
 
@@ -204,6 +217,7 @@ function updateStatus(status) {
   elements.recordButton.disabled = !connected;
   elements.imagingFields.disabled = !connected;
   elements.roiFields.disabled = !connected;
+  elements.drawRegionButton.disabled = !connected;
   elements.autoButton.textContent = status.auto_capture ? "停止自动拍照" : "开始自动拍照";
   elements.recordButton.querySelector("span").textContent = status.recording ? "停止录像" : "开始录像";
   elements.recordButton.classList.toggle("active", Boolean(status.recording));
@@ -222,8 +236,19 @@ function updateStatus(status) {
   $("recording-dropped").textContent = status.recording_dropped_frames || 0;
   $("recording-duplicated").textContent = status.recording_duplicated_frames || 0;
   $("recording-fps").textContent = status.recording_fps ? `${Number(status.recording_fps).toFixed(2)} FPS` : "—";
+  state.processingRegion = status.processing_region || null;
+  elements.clearRegionButton.disabled = !connected || !state.processingRegion;
+  if (!state.draftRegion && !state.drawing && $("draw-mode").value === "processing") {
+    updateRegionReadout(state.processingRegion);
+  }
   updateFpsDiagnostic(status.fps_diagnostic);
-  if (!connected) stopPreview();
+  if (!connected) {
+    stopPreview();
+    cancelDrawing();
+    state.draftRegion = null;
+    updateRegionReadout();
+  }
+  renderRegions();
   if (status.last_error && status.last_error !== state.lastError) {
     state.lastError = status.last_error;
     logEvent(status.last_error, true);
@@ -244,6 +269,232 @@ function updateFpsDiagnostic(diagnostic) {
     logEvent("实际采集帧率已恢复到目标范围。");
   }
   state.fpsWarningActive = active;
+}
+
+function imageContentRect() {
+  const sourceWidth = Number(state.status.width || 0);
+  const sourceHeight = Number(state.status.height || 0);
+  if (!sourceWidth || !sourceHeight || !elements.preview.naturalWidth) return null;
+  const viewportRect = elements.viewport.getBoundingClientRect();
+  const imageRect = elements.preview.getBoundingClientRect();
+  const imageRatio = elements.preview.naturalWidth / elements.preview.naturalHeight;
+  let width = imageRect.width;
+  let height = width / imageRatio;
+  if (height > imageRect.height) {
+    height = imageRect.height;
+    width = height * imageRatio;
+  }
+  return {
+    left: imageRect.left - viewportRect.left + (imageRect.width - width) / 2,
+    top: imageRect.top - viewportRect.top + (imageRect.height - height) / 2,
+    width,
+    height,
+    sourceWidth,
+    sourceHeight,
+  };
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function pointerInImage(event, rect) {
+  const viewportRect = elements.viewport.getBoundingClientRect();
+  return {
+    x: clamp(event.clientX - viewportRect.left, rect.left, rect.left + rect.width),
+    y: clamp(event.clientY - viewportRect.top, rect.top, rect.top + rect.height),
+  };
+}
+
+function pixelRegionFromDrag(start, end, rect) {
+  const left = Math.min(start.x, end.x);
+  const top = Math.min(start.y, end.y);
+  const right = Math.max(start.x, end.x);
+  const bottom = Math.max(start.y, end.y);
+  const x = Math.floor(((left - rect.left) / rect.width) * rect.sourceWidth);
+  const y = Math.floor(((top - rect.top) / rect.height) * rect.sourceHeight);
+  const x2 = Math.ceil(((right - rect.left) / rect.width) * rect.sourceWidth);
+  const y2 = Math.ceil(((bottom - rect.top) / rect.height) * rect.sourceHeight);
+  return {
+    x: clamp(x, 0, rect.sourceWidth - 1),
+    y: clamp(y, 0, rect.sourceHeight - 1),
+    width: Math.max(1, clamp(x2, 1, rect.sourceWidth) - x),
+    height: Math.max(1, clamp(y2, 1, rect.sourceHeight) - y),
+    source_width: rect.sourceWidth,
+    source_height: rect.sourceHeight,
+  };
+}
+
+function alignFeature(value, feature) {
+  const increment = Math.max(1, Number(feature.increment || 1));
+  const minimum = Number(feature.minimum || 0);
+  const maximum = Number(feature.maximum);
+  const aligned = minimum + Math.round((value - minimum) / increment) * increment;
+  return clamp(aligned, minimum, maximum);
+}
+
+function alignFromMinimum(value, feature, maximum) {
+  const increment = Math.max(1, Number(feature.increment || 1));
+  const minimum = Number(feature.minimum || 0);
+  const aligned = minimum + Math.round((value - minimum) / increment) * increment;
+  return clamp(aligned, minimum, maximum);
+}
+
+function alignCameraRegion(region) {
+  const p = state.parameters;
+  if (!p?.width || !p?.height || !p?.offset_x || !p?.offset_y) {
+    throw new Error("尚未读取相机 ROI 范围");
+  }
+  const width = alignFeature(region.width, p.width);
+  const height = alignFeature(region.height, p.height);
+  const currentOffsetX = Number(p.offset_x.value || 0);
+  const currentOffsetY = Number(p.offset_y.value || 0);
+  const sensorWidth = Math.max(
+    Number(p.width.maximum) + currentOffsetX,
+    Number(p.width.value) + Number(p.offset_x.maximum),
+  );
+  const sensorHeight = Math.max(
+    Number(p.height.maximum) + currentOffsetY,
+    Number(p.height.value) + Number(p.offset_y.maximum),
+  );
+  const offsetX = alignFromMinimum(
+    currentOffsetX + region.x,
+    p.offset_x,
+    Math.max(0, sensorWidth - width),
+  );
+  const offsetY = alignFromMinimum(
+    currentOffsetY + region.y,
+    p.offset_y,
+    Math.max(0, sensorHeight - height),
+  );
+  return {
+    ...region,
+    x: offsetX - currentOffsetX,
+    y: offsetY - currentOffsetY,
+    width,
+    height,
+    offset_x: offsetX,
+    offset_y: offsetY,
+    type: "camera",
+  };
+}
+
+function displayBox(box, region, rect) {
+  if (!region || !rect || region.source_width !== rect.sourceWidth || region.source_height !== rect.sourceHeight) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  box.style.left = `${rect.left + (region.x / rect.sourceWidth) * rect.width}px`;
+  box.style.top = `${rect.top + (region.y / rect.sourceHeight) * rect.height}px`;
+  box.style.width = `${(region.width / rect.sourceWidth) * rect.width}px`;
+  box.style.height = `${(region.height / rect.sourceHeight) * rect.height}px`;
+}
+
+function renderRegions() {
+  const rect = imageContentRect();
+  const cameraRegion = state.draftRegion?.type === "camera" ? state.draftRegion : null;
+  const processingDraft = state.draftRegion?.type === "processing" ? state.draftRegion : null;
+  displayBox(elements.cameraRegionBox, cameraRegion, rect);
+  displayBox(elements.processingRegionBox, state.processingRegion, rect);
+  displayBox(elements.draftRegionBox, state.dragRegion || processingDraft, rect);
+}
+
+function updateRegionReadout(region = null) {
+  $("selected-x").textContent = region ? region.x : "—";
+  $("selected-y").textContent = region ? region.y : "—";
+  $("selected-width").textContent = region ? region.width : "—";
+  $("selected-height").textContent = region ? region.height : "—";
+}
+
+function cancelDrawing() {
+  state.drawing = false;
+  state.dragStart = null;
+  state.dragRegion = null;
+  elements.selectionLayer.classList.remove("drawing");
+  elements.drawRegionButton.textContent = "开始框选";
+  renderRegions();
+}
+
+function toggleDrawing() {
+  if (state.drawing) {
+    cancelDrawing();
+    $("draw-help").textContent = "框选已取消。";
+    return;
+  }
+  state.drawing = true;
+  state.draftRegion = null;
+  state.dragRegion = null;
+  updateRegionReadout();
+  elements.applyRegionButton.disabled = true;
+  elements.selectionLayer.classList.add("drawing");
+  elements.selectionLayer.classList.toggle("processing-mode", $("draw-mode").value === "processing");
+  elements.drawRegionButton.textContent = "取消框选";
+  $("draw-help").textContent = "按住鼠标左键，在实时画面上拖出矩形。";
+  renderRegions();
+}
+
+function startRegionDrag(event) {
+  if (!state.drawing || event.button !== 0) return;
+  const rect = imageContentRect();
+  if (!rect) return;
+  const viewportRect = elements.viewport.getBoundingClientRect();
+  const localX = event.clientX - viewportRect.left;
+  const localY = event.clientY - viewportRect.top;
+  if (
+    localX < rect.left || localX > rect.left + rect.width
+    || localY < rect.top || localY > rect.top + rect.height
+  ) return;
+  const point = pointerInImage(event, rect);
+  state.dragStart = point;
+  state.dragRegion = pixelRegionFromDrag(point, point, rect);
+  elements.selectionLayer.setPointerCapture(event.pointerId);
+  renderRegions();
+}
+
+function moveRegionDrag(event) {
+  if (!state.dragStart) return;
+  const rect = imageContentRect();
+  if (!rect) return;
+  state.dragRegion = pixelRegionFromDrag(
+    state.dragStart,
+    pointerInImage(event, rect),
+    rect,
+  );
+  renderRegions();
+}
+
+function finishRegionDrag(event) {
+  if (!state.dragStart || !state.dragRegion) return;
+  const mode = $("draw-mode").value;
+  let region = {...state.dragRegion, type: mode};
+  if (mode === "camera") region = alignCameraRegion(region);
+  if (region.width < 2 || region.height < 2) {
+    cancelDrawing();
+    showToast("框选区域太小，请重新拖动", true);
+    return;
+  }
+  state.draftRegion = region;
+  state.dragStart = null;
+  state.dragRegion = null;
+  state.drawing = false;
+  elements.selectionLayer.classList.remove("drawing");
+  elements.drawRegionButton.textContent = "重新框选";
+  elements.applyRegionButton.disabled = false;
+  if (mode === "camera") {
+    $("roi-width").value = region.width;
+    $("roi-height").value = region.height;
+    $("roi-offset-x").value = region.offset_x;
+    $("roi-offset-y").value = region.offset_y;
+    $("roi-centered").checked = false;
+    syncRoiControls();
+    $("draw-help").textContent = "蓝框已按相机步长对齐，点击“应用框选”写入相机。";
+  } else {
+    $("draw-help").textContent = "橙色虚线框不会裁图，点击“应用框选”保存处理区域。";
+  }
+  updateRegionReadout(region);
+  elements.selectionLayer.releasePointerCapture(event.pointerId);
+  renderRegions();
 }
 
 function applyFeature(id, feature, rangeId) {
@@ -296,6 +547,11 @@ async function loadParameters() {
   $("fps-enabled").checked = Boolean(p.frame_rate_enabled);
   syncParameterControls();
   syncRoiControls();
+  if (!state.drawing && !state.draftRegion) {
+    $("draw-help").textContent = $("draw-mode").value === "camera"
+      ? "拖框后会按相机步长对齐，应用后框外不再采集。"
+      : "拖框后只保存处理坐标，完整画面继续保留。";
+  }
 }
 
 function syncParameterControls() {
@@ -345,12 +601,56 @@ async function applyRoi() {
     if (capabilities.offset_x) values.offset_x = numberValue("roi-offset-x");
     if (capabilities.offset_y) values.offset_y = numberValue("roi-offset-y");
   }
+  const clearedProcessingRegion = Boolean(state.processingRegion);
   const payload = await api("/api/camera/roi", { method: "PUT", body: JSON.stringify(values) });
   state.parameters = payload.parameters;
+  state.draftRegion = null;
+  state.processingRegion = null;
+  updateRegionReadout();
+  elements.applyRegionButton.disabled = true;
   await loadParameters();
   await pollStatus();
+  renderRegions();
   showToast("相机 ROI 已应用");
-  logEvent(`相机采集 ROI 已设为 ${values.width} × ${values.height}${centered ? "，并已居中" : ""}。`);
+  logEvent(`相机采集 ROI 已设为 ${values.width} × ${values.height}${centered ? "，并已居中" : ""}。${clearedProcessingRegion ? "采集坐标已改变，原处理区域已清除。" : ""}`);
+}
+
+async function applyDrawnRegion() {
+  const region = state.draftRegion;
+  if (!region) throw new Error("请先在画面上框选区域");
+  if (region.type === "camera") {
+    await applyRoi();
+    return;
+  }
+  const payload = await api("/api/processing-region", {
+    method: "PUT",
+    body: JSON.stringify({
+      x: region.x,
+      y: region.y,
+      width: region.width,
+      height: region.height,
+    }),
+  });
+  state.processingRegion = payload.region;
+  state.draftRegion = null;
+  elements.applyRegionButton.disabled = true;
+  elements.clearRegionButton.disabled = false;
+  updateRegionReadout(state.processingRegion);
+  renderRegions();
+  showToast("处理区域已保存");
+  logEvent(`处理区域已保存：X=${payload.region.x}，Y=${payload.region.y}，${payload.region.width} × ${payload.region.height}；完整画面继续保留。`);
+}
+
+async function clearProcessingRegion() {
+  await api("/api/processing-region", { method: "DELETE" });
+  state.processingRegion = null;
+  if (state.draftRegion?.type === "processing") state.draftRegion = null;
+  elements.clearRegionButton.disabled = true;
+  elements.applyRegionButton.disabled = !state.draftRegion;
+  updateRegionReadout(state.draftRegion);
+  renderRegions();
+  showToast("处理区域已清除");
+  logEvent("处理区域已清除，完整画面不受影响。");
 }
 
 async function takeSnapshot() {
@@ -402,6 +702,27 @@ function bindEvents() {
   elements.recordButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleRecording).catch(() => {}));
   $("apply-parameters-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyParameters).catch(() => {}));
   $("apply-roi-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyRoi).catch(() => {}));
+  elements.drawRegionButton.addEventListener("click", toggleDrawing);
+  elements.applyRegionButton.addEventListener("click", (event) => withBusy(event.currentTarget, applyDrawnRegion).then(() => {
+    event.currentTarget.disabled = !state.draftRegion;
+  }).catch(() => {}));
+  elements.clearRegionButton.addEventListener("click", (event) => withBusy(event.currentTarget, clearProcessingRegion).then(() => {
+    event.currentTarget.disabled = !state.processingRegion;
+  }).catch(() => {}));
+  $("draw-mode").addEventListener("change", () => {
+    cancelDrawing();
+    state.draftRegion = null;
+    elements.applyRegionButton.disabled = true;
+    updateRegionReadout($("draw-mode").value === "processing" ? state.processingRegion : null);
+    $("draw-help").textContent = $("draw-mode").value === "camera"
+      ? "拖框后会按相机步长对齐，应用后框外不再采集。"
+      : "拖框后只保存处理坐标，完整画面继续保留。";
+    renderRegions();
+  });
+  elements.selectionLayer.addEventListener("pointerdown", startRegionDrag);
+  elements.selectionLayer.addEventListener("pointermove", moveRegionDrag);
+  elements.selectionLayer.addEventListener("pointerup", finishRegionDrag);
+  elements.selectionLayer.addEventListener("pointercancel", cancelDrawing);
   $("exposure-mode").addEventListener("change", syncParameterControls);
   $("gain-mode").addEventListener("change", syncParameterControls);
   $("fps-enabled").addEventListener("change", syncParameterControls);
@@ -409,6 +730,8 @@ function bindEvents() {
   elements.preview.addEventListener("error", () => {
     if (state.status.connected) logEvent("实时预览中断，正在等待重新连接。", true);
   });
+  elements.preview.addEventListener("load", renderRegions);
+  window.addEventListener("resize", renderRegions);
   window.addEventListener("pagehide", () => {
     if (!state.status.connected) return;
     navigator.sendBeacon(

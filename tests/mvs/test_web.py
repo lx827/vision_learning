@@ -23,6 +23,12 @@ class FakeWebService:
     def apply_roi(self, payload):
         return {"applied_roi": payload}
 
+    def set_processing_region(self, payload):
+        return {**payload, "source_width": 64, "source_height": 48}
+
+    def clear_processing_region(self):
+        return None
+
 
 def test_health_devices_and_config_api():
     app = create_app(service=FakeWebService())
@@ -59,6 +65,27 @@ def test_roi_api_forwards_camera_coordinates():
         "height": 2048,
         "centered": True,
     }
+
+
+def test_processing_region_api_keeps_separate_coordinates():
+    app = create_app(service=FakeWebService())
+    client = app.test_client()
+
+    response = client.put(
+        "/api/processing-region",
+        json={"x": 4, "y": 6, "width": 20, "height": 10},
+    )
+    cleared = client.delete("/api/processing-region")
+
+    assert response.get_json()["region"] == {
+        "x": 4,
+        "y": 6,
+        "width": 20,
+        "height": 10,
+        "source_width": 64,
+        "source_height": 48,
+    }
+    assert cleared.get_json()["region"] is None
 
 
 def test_unknown_route_remains_not_found():

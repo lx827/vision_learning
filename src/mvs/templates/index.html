@@ -67,10 +67,54 @@
             <span>丢包 <b id="metric-lost">0</b></span>
           </div>
         </div>
-        <div class="viewport" id="viewport">
-          <img id="preview-image" alt="MVS 相机实时画面">
-          <div class="empty-state" id="empty-state">连接相机后在这里显示实时画面</div>
-          <div class="recording-badge" id="recording-badge"><span></span>录像中</div>
+        <div class="preview-workspace">
+          <div class="viewport" id="viewport">
+            <img id="preview-image" alt="MVS 相机实时画面">
+            <div class="selection-layer" id="selection-layer" aria-label="在实时画面上拖动框选区域">
+              <div class="region-box camera-region" id="camera-region-box" hidden><span>相机 ROI</span></div>
+              <div class="region-box processing-region" id="processing-region-box" hidden><span>处理区域</span></div>
+              <div class="region-box draft-region" id="draft-region-box" hidden></div>
+            </div>
+            <div class="empty-state" id="empty-state">连接相机后在这里显示实时画面</div>
+            <div class="recording-badge" id="recording-badge"><span></span>录像中</div>
+          </div>
+
+          <aside class="region-tools" aria-label="区域框选工具">
+            <h3>区域框选</h3>
+            <div class="field">
+              <label for="draw-mode">框选用途</label>
+              <select id="draw-mode">
+                <option value="camera">相机采集 ROI</option>
+                <option value="processing">处理区域（保留完整画面）</option>
+              </select>
+            </div>
+            <div class="region-actions">
+              <button class="button" id="draw-region-button" type="button" disabled>开始框选</button>
+              <button class="button primary" id="apply-region-button" type="button" disabled>应用框选</button>
+              <button class="button" id="clear-region-button" type="button" disabled>清除处理区域</button>
+            </div>
+            <p class="draw-help" id="draw-help">连接相机后，选择用途并在画面上拖动。</p>
+            <dl class="region-readout">
+              <dt>X</dt><dd id="selected-x">—</dd>
+              <dt>Y</dt><dd id="selected-y">—</dd>
+              <dt>宽</dt><dd id="selected-width">—</dd>
+              <dt>高</dt><dd id="selected-height">—</dd>
+            </dl>
+
+            <details class="precise-roi">
+              <summary>精确输入相机 ROI</summary>
+              <fieldset id="roi-fields" disabled>
+                <div class="form-grid two-columns compact-grid">
+                  <div class="field"><label for="roi-width">宽度</label><input id="roi-width" type="number"><small id="roi-width-range">—</small></div>
+                  <div class="field"><label for="roi-height">高度</label><input id="roi-height" type="number"><small id="roi-height-range">—</small></div>
+                  <div class="field"><label for="roi-offset-x">偏移 X</label><input id="roi-offset-x" type="number"><small id="roi-offset-x-range">—</small></div>
+                  <div class="field"><label for="roi-offset-y">偏移 Y</label><input id="roi-offset-y" type="number"><small id="roi-offset-y-range">—</small></div>
+                  <div class="field checkbox-field full"><input id="roi-centered" type="checkbox" checked><label for="roi-centered">自动居中</label></div>
+                </div>
+                <button class="button" id="apply-roi-button" type="button">应用精确数值</button>
+              </fieldset>
+            </details>
+          </aside>
         </div>
         <div class="event-strip">
           <span id="event-time">--:--:--</span>
@@ -133,20 +177,6 @@
             </fieldset>
           </section>
 
-          <section class="panel roi-panel">
-            <h2>相机采集 ROI</h2>
-            <fieldset id="roi-fields" disabled>
-              <div class="form-grid two-columns">
-                <div class="field"><label for="roi-width">采集宽度（px）</label><input id="roi-width" type="number"><small id="roi-width-range">—</small></div>
-                <div class="field"><label for="roi-height">采集高度（px）</label><input id="roi-height" type="number"><small id="roi-height-range">—</small></div>
-                <div class="field"><label for="roi-offset-x">水平偏移 X（px）</label><input id="roi-offset-x" type="number"><small id="roi-offset-x-range">—</small></div>
-                <div class="field"><label for="roi-offset-y">垂直偏移 Y（px）</label><input id="roi-offset-y" type="number"><small id="roi-offset-y-range">—</small></div>
-                <div class="field checkbox-field full"><input id="roi-centered" type="checkbox" checked><label for="roi-centered">自动将 ROI 放在传感器中央</label></div>
-              </div>
-              <p class="help">ROI 会让相机只采集指定区域，能够真正减少传输和处理数据。应用时会短暂停止并自动恢复取流；录像或自动拍照期间不可修改。</p>
-              <button class="button primary" id="apply-roi-button" type="button">应用相机 ROI</button>
-            </fieldset>
-          </section>
         </div>
       </div>
     </main>

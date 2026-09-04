@@ -147,6 +147,7 @@ class MvsCameraService:
         self._recording = False
         self._recording_path = ""
         self._recording_fps = 0.0
+        self._processing_region: dict[str, int] | None = None
 
     @property
     def config(self) -> MvsAppConfig:
@@ -232,6 +233,7 @@ class MvsCameraService:
                 self._camera_parameters = {}
                 self._lost_packets = 0
                 self._frame_times.clear()
+                self._processing_region = None
                 self._frame_condition.notify_all()
         return self.status()
 
@@ -285,8 +287,50 @@ class MvsCameraService:
                 self._latest_size = (0, 0)
                 self._preview_size = (0, 0)
                 self._frame_times.clear()
+                self._processing_region = None
                 self._frame_condition.notify_all()
             return parameters
+
+    def set_processing_region(self, values: dict[str, Any]) -> dict[str, int]:
+        """保存相对于当前采集画面的算法处理区域，不裁剪相机画面。"""
+        allowed = {"x", "y", "width", "height"}
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise ValueError(f"未知处理区域参数：{', '.join(unknown)}")
+        missing = sorted(allowed - set(values))
+        if missing:
+            raise ValueError(f"处理区域缺少参数：{', '.join(missing)}")
+        region: dict[str, int] = {}
+        for name in allowed:
+            value = values[name]
+            if isinstance(value, bool) or int(value) != float(value):
+                raise ValueError(f"处理区域 {name} 必须是整数")
+            region[name] = int(value)
+        with self._lock:
+            frame_width, frame_height = self._latest_size
+            if not self._connected or frame_width <= 0 or frame_height <= 0:
+                raise MvsError("尚未收到相机画面，无法设置处理区域")
+            if region["x"] < 0 or region["y"] < 0:
+                raise ValueError("处理区域起点不能小于 0")
+            if region["width"] <= 0 or region["height"] <= 0:
+                raise ValueError("处理区域宽高必须大于 0")
+            if (
+                region["x"] + region["width"] > frame_width
+                or region["y"] + region["height"] > frame_height
+            ):
+                raise ValueError(
+                    f"处理区域不能超过当前 {frame_width}×{frame_height} 采集画面"
+                )
+            self._processing_region = {
+                **region,
+                "source_width": frame_width,
+                "source_height": frame_height,
+            }
+            return dict(self._processing_region)
+
+    def clear_processing_region(self) -> None:
+        with self._lock:
+            self._processing_region = None
 
     def save_snapshot(self) -> str:
         with self._lock:
@@ -423,6 +467,9 @@ class MvsCameraService:
                 "height": height,
                 "preview_width": preview_width,
                 "preview_height": preview_height,
+                "processing_region": (
+                    dict(self._processing_region) if self._processing_region else None
+                ),
                 "lost_packets": self._lost_packets,
                 "device": self._device.to_dict() if self._device else None,
             }
