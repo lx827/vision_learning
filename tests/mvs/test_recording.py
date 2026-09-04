@@ -49,6 +49,8 @@ def test_recorder_releases_writer_only_after_background_write_finishes(tmp_path:
     recorder = VideoRecorder(writer_factory=lambda *args: writer)
     recorder.start(tmp_path / "test.mp4", video_format="mp4", fps=15.0)
     recorder.submit(np.zeros((48, 64, 3), dtype=np.uint8))
+    time.sleep(0.08)
+    recorder.submit(np.zeros((48, 64, 3), dtype=np.uint8))
     assert write_started.wait(timeout=1.0)
 
     stopper = threading.Thread(
@@ -68,20 +70,67 @@ def test_recorder_releases_writer_only_after_background_write_finishes(tmp_path:
     assert not writer.released_during_write
 
 
+def test_recording_duration_tracks_wall_clock_when_input_fps_is_low(tmp_path: Path):
+    class CountingWriter:
+        def __init__(self):
+            self.frames_written = 0
+
+        def isOpened(self):
+            return True
+
+        def write(self, frame):
+            self.frames_written += 1
+
+        def release(self):
+            pass
+
+    writer = CountingWriter()
+    fps = 20.0
+    clock_value = [0.0]
+    recorder = VideoRecorder(
+        writer_factory=lambda *args: writer,
+        clock=lambda: clock_value[0],
+    )
+    recorder.start(tmp_path / "realtime.mp4", video_format="mp4", fps=fps)
+    recorder.submit(np.zeros((48, 64, 3), dtype=np.uint8))
+    deadline = time.monotonic() + 1.0
+    while recorder.output_size == (0, 0) and time.monotonic() < deadline:
+        time.sleep(0.001)
+    assert recorder.output_size == (64, 48)
+
+    for second in range(1, 5):
+        clock_value[0] = float(second)
+        recorder.submit(np.zeros((48, 64, 3), dtype=np.uint8))
+    clock_value[0] = 5.0
+    recorder.stop()
+
+    encoded_duration = writer.frames_written / fps
+    assert encoded_duration == pytest.approx(5.0, abs=1 / fps)
+
+
 @pytest.mark.parametrize("video_format", ["avi", "mp4"])
 def test_recorder_creates_readable_video(tmp_path: Path, video_format: str):
     path = tmp_path / f"readable.{video_format}"
-    recorder = VideoRecorder()
+    clock_value = [0.0]
+    recorder = VideoRecorder(clock=lambda: clock_value[0])
     recorder.start(path, video_format=video_format, fps=10.0)
-    for value in range(3):
+    for value, captured_at in enumerate((0.0, 0.5)):
+        clock_value[0] = captured_at
         recorder.submit(np.full((48, 64, 3), value * 40, dtype=np.uint8))
-        time.sleep(0.02)
+        deadline = time.monotonic() + 1.0
+        while recorder.output_size == (0, 0) and time.monotonic() < deadline:
+            time.sleep(0.001)
+    clock_value[0] = 1.0
     recorder.stop()
 
     capture = cv2.VideoCapture(str(path))
     try:
         assert capture.isOpened()
-        assert int(capture.get(cv2.CAP_PROP_FRAME_COUNT)) >= 1
+        frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        file_fps = capture.get(cv2.CAP_PROP_FPS)
+        assert frame_count == 10
+        assert file_fps == pytest.approx(10.0)
+        assert frame_count / file_fps == pytest.approx(1.0, abs=0.1)
         ok, frame = capture.read()
         assert ok
         assert frame.shape == (48, 64, 3)

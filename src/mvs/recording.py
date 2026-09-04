@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import queue
 import threading
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -12,7 +14,16 @@ import numpy as np
 
 from .sdk import MvsError
 
-_STOP = object()
+
+@dataclass(frozen=True)
+class _FramePacket:
+    frame: np.ndarray
+    captured_at: float
+
+
+@dataclass(frozen=True)
+class _StopPacket:
+    stopped_at: float
 
 
 def fit_video_frame(
@@ -42,11 +53,13 @@ class VideoRecorder:
         *,
         writer_factory: Callable[..., Any] = cv2.VideoWriter,
         queue_size: int = 2,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._writer_factory = writer_factory
         self._queue_size = queue_size
+        self._clock = clock
         self._lock = threading.Lock()
-        self._queue: queue.Queue[np.ndarray | object] | None = None
+        self._queue: queue.Queue[_FramePacket | _StopPacket] | None = None
         self._worker: threading.Thread | None = None
         self._running = False
         self._error: Exception | None = None
@@ -95,8 +108,9 @@ class VideoRecorder:
             if not self._running or self._queue is None:
                 return
             target_queue = self._queue
+            packet = _FramePacket(frame=frame, captured_at=self._clock())
             try:
-                target_queue.put_nowait(frame)
+                target_queue.put_nowait(packet)
                 return
             except queue.Full:
                 self._dropped_frames += 1
@@ -105,28 +119,29 @@ class VideoRecorder:
             except queue.Empty:
                 pass
             try:
-                target_queue.put_nowait(frame)
+                target_queue.put_nowait(packet)
             except queue.Full:
                 self._dropped_frames += 1
 
     def stop(self, timeout: float = 10.0) -> None:
+        stopped_at = self._clock()
         with self._lock:
             was_running = self._running
             self._running = False
             target_queue = self._queue
             worker = self._worker
         if was_running and target_queue is not None:
-            latest_frame = None
+            latest_packet = None
             while True:
                 try:
                     item = target_queue.get_nowait()
-                    if item is not _STOP:
-                        latest_frame = item
+                    if isinstance(item, _FramePacket):
+                        latest_packet = item
                 except queue.Empty:
                     break
-            if latest_frame is not None and target_queue.maxsize > 1:
-                target_queue.put_nowait(latest_frame)
-            target_queue.put_nowait(_STOP)
+            if latest_packet is not None and target_queue.maxsize > 1:
+                target_queue.put_nowait(latest_packet)
+            target_queue.put_nowait(_StopPacket(stopped_at=stopped_at))
         if worker is not None:
             worker.join(timeout=timeout)
             if worker.is_alive():
@@ -147,16 +162,25 @@ class VideoRecorder:
         max_height: int,
     ) -> None:
         writer = None
+        previous_frame = None
+        started_at = None
+        frames_written = 0
         try:
             while True:
                 target_queue = self._queue
                 if target_queue is None:
                     return
                 item = target_queue.get()
-                if item is _STOP:
+                if isinstance(item, _StopPacket):
+                    if writer is not None and previous_frame is not None:
+                        elapsed = max(0.0, item.stopped_at - started_at)
+                        target_frames = max(1, int(round(elapsed * fps)))
+                        while frames_written < target_frames:
+                            writer.write(previous_frame)
+                            frames_written += 1
                     return
                 frame = fit_video_frame(
-                    item, max_width=max_width, max_height=max_height
+                    item.frame, max_width=max_width, max_height=max_height
                 )
                 if writer is None:
                     height, width = frame.shape[:2]
@@ -168,7 +192,17 @@ class VideoRecorder:
                         raise MvsError(f"无法创建录像文件：{path}")
                     with self._lock:
                         self._output_size = (width, height)
-                writer.write(frame)
+                    started_at = item.captured_at
+                    previous_frame = frame
+                    continue
+                target_frames = max(
+                    frames_written,
+                    int(round((item.captured_at - started_at) * fps)),
+                )
+                while frames_written < target_frames:
+                    writer.write(previous_frame)
+                    frames_written += 1
+                previous_frame = frame
         except Exception as exc:
             with self._lock:
                 self._error = exc
