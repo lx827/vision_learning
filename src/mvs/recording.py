@@ -93,9 +93,17 @@ class VideoRecorder:
             self._error = None
             self._dropped_frames = 0
             self._output_size = (0, 0)
+            started_at = self._clock()
             self._worker = threading.Thread(
                 target=self._run,
-                args=(str(path), video_format, float(fps), max_width, max_height),
+                args=(
+                    str(path),
+                    video_format,
+                    float(fps),
+                    max_width,
+                    max_height,
+                    started_at,
+                ),
                 name="mvs-video-writer",
                 daemon=True,
             )
@@ -160,10 +168,10 @@ class VideoRecorder:
         fps: float,
         max_width: int,
         max_height: int,
+        started_at: float,
     ) -> None:
         writer = None
         previous_frame = None
-        started_at = None
         frames_written = 0
         try:
             while True:
@@ -192,7 +200,6 @@ class VideoRecorder:
                         raise MvsError(f"无法创建录像文件：{path}")
                     with self._lock:
                         self._output_size = (width, height)
-                    started_at = item.captured_at
                     previous_frame = frame
                     continue
                 target_frames = max(

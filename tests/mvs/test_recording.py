@@ -108,6 +108,35 @@ def test_recording_duration_tracks_wall_clock_when_input_fps_is_low(tmp_path: Pa
     assert encoded_duration == pytest.approx(5.0, abs=1 / fps)
 
 
+def test_recording_duration_starts_before_first_camera_frame(tmp_path: Path):
+    class CountingWriter:
+        def __init__(self):
+            self.frames_written = 0
+
+        def isOpened(self):
+            return True
+
+        def write(self, frame):
+            self.frames_written += 1
+
+        def release(self):
+            pass
+
+    writer = CountingWriter()
+    clock_value = [0.0]
+    recorder = VideoRecorder(
+        writer_factory=lambda *args: writer,
+        clock=lambda: clock_value[0],
+    )
+    recorder.start(tmp_path / "delayed-first-frame.mp4", video_format="mp4", fps=10.0)
+    clock_value[0] = 2.0
+    recorder.submit(np.zeros((48, 64, 3), dtype=np.uint8))
+    clock_value[0] = 5.0
+    recorder.stop()
+
+    assert writer.frames_written / 10.0 == pytest.approx(5.0, abs=0.1)
+
+
 @pytest.mark.parametrize("video_format", ["avi", "mp4"])
 def test_recorder_creates_readable_video(tmp_path: Path, video_format: str):
     path = tmp_path / f"readable.{video_format}"
