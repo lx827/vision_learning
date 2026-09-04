@@ -89,6 +89,8 @@
             <dl class="file-status">
               <dt>最近照片</dt><dd><code id="last-photo">—</code></dd>
               <dt>录像文件</dt><dd><code id="recording-path">—</code></dd>
+              <dt>录像尺寸</dt><dd><code id="recording-size">—</code></dd>
+              <dt>丢弃帧</dt><dd><code id="recording-dropped">0</code></dd>
             </dl>
           </section>
 
@@ -103,6 +105,7 @@
               <div class="field"><label for="video-fps">录像帧率</label><input id="video-fps" type="number" min="0.1" step="0.1"></div>
               <div class="field full"><label for="video-dir">视频目录</label><input id="video-dir"></div>
             </div>
+            <p class="help">超大画面录像会等比例缩小到 1920×1080 范围，避免阻塞预览和生成损坏文件。</p>
             <button class="button" id="save-output-button" type="button">保存输出设置</button>
           </section>
         </div>

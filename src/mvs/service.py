@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 
 from .config import MvsAppConfig, MvsConfigStore
+from .recording import VideoRecorder
 from .sdk import Frame, MvsCamera, MvsDeviceInfo, MvsError
 
 
@@ -24,10 +25,12 @@ class MvsCameraService:
         config_store: MvsConfigStore,
         *,
         camera_factory: Callable[[str], MvsCamera] = MvsCamera,
+        video_writer_factory: Callable[..., Any] = cv2.VideoWriter,
     ) -> None:
         self._config_store = config_store
         self._config = config_store.load()
         self._camera_factory = camera_factory
+        self._video_recorder = VideoRecorder(writer_factory=video_writer_factory)
         self._camera: MvsCamera | None = None
         self._device: MvsDeviceInfo | None = None
         self._worker: threading.Thread | None = None
@@ -50,7 +53,6 @@ class MvsCameraService:
         self._next_auto_capture = 0.0
         self._recording = False
         self._recording_path = ""
-        self._video_writer: cv2.VideoWriter | None = None
 
     @property
     def config(self) -> MvsAppConfig:
@@ -72,11 +74,15 @@ class MvsCameraService:
         return config.to_dict()
 
     def enumerate_devices(self) -> list[dict[str, Any]]:
-        with self._lock:
-            if self._connected and self._device is not None:
-                return [self._device.to_dict()]
-            sdk_path = self._config.camera.sdk_python_path
-        return [device.to_dict() for device in MvsCamera.enumerate_devices(sdk_path)]
+        with self._operation_lock:
+            with self._lock:
+                if self._connected and self._device is not None:
+                    return [self._device.to_dict()]
+                sdk_path = self._config.camera.sdk_python_path
+            return [
+                device.to_dict()
+                for device in self._camera_factory.enumerate_devices(sdk_path)
+            ]
 
     def connect(self) -> dict[str, Any]:
         with self._operation_lock:
@@ -115,7 +121,7 @@ class MvsCameraService:
                 worker.join(
                     timeout=max(2.0, self._config.camera.frame_timeout_ms / 1000 + 1.0)
                 )
-            self._release_video_writer()
+            self._stop_video_recorder(raise_errors=False)
             if camera is not None:
                 camera.close()
             with self._lock:
@@ -200,15 +206,21 @@ class MvsCameraService:
                 directory / f"mvs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{suffix}"
             )
             self._recording_path = str(path)
+            self._video_recorder.start(
+                path,
+                video_format=config.video_format,
+                fps=config.video_fps,
+                max_width=config.video_max_width,
+                max_height=config.video_max_height,
+            )
             self._recording = True
-            self._video_writer = None
             return str(path)
 
     def stop_recording(self) -> str:
         with self._lock:
             path = self._recording_path
             self._recording = False
-        self._release_video_writer()
+        self._stop_video_recorder(raise_errors=True)
         return path
 
     def wait_for_jpeg(
@@ -235,6 +247,8 @@ class MvsCameraService:
                 "auto_capture": self._auto_capture,
                 "recording": self._recording,
                 "recording_path": self._recording_path,
+                "recording_dropped_frames": self._video_recorder.dropped_frames,
+                "recording_size": self._video_recorder.output_size,
                 "last_photo": self._last_photo,
                 "last_error": self._last_error,
                 "fps": round(fps, 2),
@@ -266,7 +280,7 @@ class MvsCameraService:
                 self._streaming = False
                 self._frame_condition.notify_all()
         finally:
-            self._release_video_writer()
+            self._stop_video_recorder(raise_errors=False)
 
     def _publish_frame(self, frame: Frame) -> None:
         quality = self._config.capture.preview_quality
@@ -305,22 +319,13 @@ class MvsCameraService:
         with self._lock:
             if not self._recording:
                 return
-            writer = self._video_writer
-            path = self._recording_path
-            config = self._config.capture
-        if writer is None:
-            height, width = frame.shape[:2]
-            fourcc = cv2.VideoWriter_fourcc(
-                *("mp4v" if config.video_format == "mp4" else "MJPG")
-            )
-            writer = cv2.VideoWriter(path, fourcc, config.video_fps, (width, height))
-            if not writer.isOpened():
-                with self._lock:
-                    self._recording = False
-                raise MvsError(f"无法创建录像文件：{path}")
+        try:
+            self._video_recorder.submit(frame)
+        except MvsError as exc:
             with self._lock:
-                self._video_writer = writer
-        writer.write(frame)
+                self._recording = False
+                self._last_error = str(exc)
+            self._stop_video_recorder(raise_errors=False)
 
     def _save_photo(self, frame: np.ndarray, image_format: str, quality: int) -> Path:
         directory = Path(self._config.capture.photo_dir)
@@ -336,12 +341,14 @@ class MvsCameraService:
         path.write_bytes(encoded.tobytes())
         return path
 
-    def _release_video_writer(self) -> None:
-        with self._lock:
-            writer = self._video_writer
-            self._video_writer = None
-        if writer is not None:
-            writer.release()
+    def _stop_video_recorder(self, *, raise_errors: bool) -> None:
+        try:
+            self._video_recorder.stop()
+        except MvsError as exc:
+            with self._lock:
+                self._last_error = str(exc)
+            if raise_errors:
+                raise
 
     def _require_camera(self) -> MvsCamera:
         with self._lock:

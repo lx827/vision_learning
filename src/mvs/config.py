@@ -38,6 +38,8 @@ class CaptureConfig:
     auto_interval_seconds: float = 5.0
     video_format: str = "mp4"
     video_fps: float = 15.0
+    video_max_width: int = 1920
+    video_max_height: int = 1080
     preview_quality: int = 80
 
     def validate(self) -> None:
@@ -51,6 +53,8 @@ class CaptureConfig:
             raise ValueError("自动拍照间隔不能小于 0.2 秒")
         if not 0.1 <= self.video_fps <= 240:
             raise ValueError("录像帧率必须在 0.1～240 FPS 之间")
+        if self.video_max_width < 2 or self.video_max_height < 2:
+            raise ValueError("录像最大宽高不能小于 2 像素")
         if not 20 <= self.preview_quality <= 100:
             raise ValueError("预览质量必须在 20～100 之间")
         if not self.photo_dir.strip() or not self.video_dir.strip():

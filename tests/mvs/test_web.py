@@ -1,6 +1,6 @@
 from src.mvs.config import MvsAppConfig
 from src.mvs.sdk import MvsError
-from src.mvs.web import create_app
+from src.mvs.web import _schedule_browser_open, create_app
 
 
 class FakeWebService:
@@ -48,3 +48,30 @@ def test_unknown_route_remains_not_found():
 
     assert response.status_code == 404
     assert response.get_json()["ok"] is False
+
+
+def test_browser_open_is_scheduled_in_daemon_timer(monkeypatch):
+    opened = []
+    timers = []
+
+    class FakeTimer:
+        def __init__(self, delay, callback, args):
+            self.delay = delay
+            self.callback = callback
+            self.args = args
+            self.daemon = False
+            self.started = False
+            timers.append(self)
+
+        def start(self):
+            self.started = True
+            self.callback(*self.args)
+
+    monkeypatch.setattr("src.mvs.web.threading.Timer", FakeTimer)
+    monkeypatch.setattr("src.mvs.web.webbrowser.open", opened.append)
+
+    _schedule_browser_open("http://127.0.0.1:8765")
+
+    assert opened == ["http://127.0.0.1:8765"]
+    assert timers[0].daemon is True
+    assert timers[0].started is True

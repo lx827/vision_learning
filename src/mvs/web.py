@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import atexit
+import threading
+import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -141,11 +143,27 @@ def _ok(**payload: Any):
     return jsonify({"ok": True, **payload})
 
 
-def run(config_path: str | Path = "configs/mvs/camera.yaml") -> None:
+def _schedule_browser_open(url: str, delay: float = 1.0) -> None:
+    """Open the console after Flask has had time to bind its local port."""
+    timer = threading.Timer(delay, webbrowser.open, args=(url,))
+    timer.daemon = True
+    timer.start()
+
+
+def run(
+    config_path: str | Path = "configs/mvs/camera.yaml", *, open_browser: bool = True
+) -> None:
     """使用配置文件启动本地调试服务。"""
     store = MvsConfigStore(config_path)
     config: MvsAppConfig = store.load()
     app = create_app(config_path)
+    browser_host = (
+        "127.0.0.1" if config.server.host in {"0.0.0.0", "::"} else config.server.host
+    )
+    url = f"http://{browser_host}:{config.server.port}"
+    print(f"MVS 调试台：{url}")
+    if open_browser:
+        _schedule_browser_open(url)
     app.run(
         host=config.server.host,
         port=config.server.port,

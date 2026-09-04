@@ -20,8 +20,13 @@ def main() -> None:
         default="configs/mvs/camera.yaml",
         help="调试台 YAML 配置路径",
     )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="启动服务但不自动打开浏览器",
+    )
     args = parser.parse_args()
-    run(args.config)
+    run(args.config, open_browser=not args.no_browser)
 
 
 if __name__ == "__main__":

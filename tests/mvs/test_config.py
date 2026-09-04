@@ -31,3 +31,8 @@ def test_config_round_trip(tmp_path: Path):
 def test_invalid_camera_ip_is_rejected():
     with pytest.raises(ValueError):
         MvsAppConfig.from_dict({"camera": {"ip": "192.168.999.2"}})
+
+
+def test_invalid_video_size_is_rejected():
+    with pytest.raises(ValueError, match="录像最大宽高"):
+        MvsAppConfig.from_dict({"capture": {"video_max_width": 1}})

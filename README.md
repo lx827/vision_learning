@@ -127,7 +127,9 @@ python scripts/mvs_probe.py --snapshot
 python scripts/mvs_web.py
 ```
 
-浏览器访问 `http://127.0.0.1:8765`。相机和输出配置保存在 `configs/mvs/camera.yaml`；页面中的 IP 只用于选择已经枚举出的设备，不会修改相机自身的网络配置。
+服务就绪后会自动打开浏览器并访问 `http://127.0.0.1:8765`。相机和输出配置保存在 `configs/mvs/camera.yaml`；页面中的 IP 只用于选择已经枚举出的设备，不会修改相机自身的网络配置。如需只启动服务而不打开浏览器，可运行 `python scripts/mvs_web.py --no-browser`。
+
+录像编码在独立后台线程中执行，不会阻塞相机取流、预览或拍照。超过 1920×1080 范围的画面会保持宽高比自动缩小，以避免超高分辨率视频损坏或播放器不兼容；原始分辨率照片不受影响。
 
 ---
 

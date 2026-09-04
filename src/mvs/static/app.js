@@ -3,6 +3,7 @@ const state = {
   devices: [],
   status: { connected: false, auto_capture: false, recording: false },
   streamStarted: false,
+  scanPromise: null,
   lastError: "",
 };
 
@@ -99,6 +100,7 @@ function collectConfig() {
       frame_timeout_ms: numberValue("frame-timeout"),
     },
     capture: {
+      ...(state.config?.capture || {}),
       photo_dir: $("photo-dir").value.trim(),
       video_dir: $("video-dir").value.trim(),
       photo_format: $("photo-format").value,
@@ -121,6 +123,16 @@ async function saveConfig(message = "配置已保存") {
 }
 
 async function scanDevices() {
+  if (state.scanPromise) return state.scanPromise;
+  state.scanPromise = scanDevicesOnce();
+  try {
+    return await state.scanPromise;
+  } finally {
+    state.scanPromise = null;
+  }
+}
+
+async function scanDevicesOnce() {
   const payload = await api("/api/devices");
   state.devices = payload.devices;
   elements.deviceSelect.replaceChildren();
@@ -198,6 +210,9 @@ function updateStatus(status) {
   $("last-photo").title = status.last_photo || "";
   $("recording-path").textContent = status.recording_path || "—";
   $("recording-path").title = status.recording_path || "";
+  const recordingSize = status.recording_size || [0, 0];
+  $("recording-size").textContent = recordingSize[0] ? `${recordingSize[0]} × ${recordingSize[1]}` : "—";
+  $("recording-dropped").textContent = status.recording_dropped_frames || 0;
   if (!connected) stopPreview();
   if (status.last_error && status.last_error !== state.lastError) {
     state.lastError = status.last_error;
@@ -321,7 +336,7 @@ async function initialize() {
     const [configPayload, statusPayload] = await Promise.all([api("/api/config"), api("/api/camera/status")]);
     fillConfig(configPayload.config);
     updateStatus(statusPayload.status);
-    await scanDevices();
+    await withBusy($("scan-button"), scanDevices);
   } catch (error) {
     showToast(error.message, true);
     logEvent(error.message, true);
