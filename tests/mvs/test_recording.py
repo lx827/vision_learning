@@ -106,6 +106,7 @@ def test_recording_duration_tracks_wall_clock_when_input_fps_is_low(tmp_path: Pa
 
     encoded_duration = writer.frames_written / fps
     assert encoded_duration == pytest.approx(5.0, abs=1 / fps)
+    assert recorder.duplicated_frames > 0
 
 
 def test_recording_duration_starts_before_first_camera_frame(tmp_path: Path):

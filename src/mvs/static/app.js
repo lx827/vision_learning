@@ -5,6 +5,7 @@ const state = {
   status: { connected: false, auto_capture: false, recording: false },
   streamStarted: false,
   scanPromise: null,
+  fpsWarningActive: false,
   lastError: "",
 };
 
@@ -212,12 +213,30 @@ function updateStatus(status) {
   const recordingSize = status.recording_size || [0, 0];
   $("recording-size").textContent = recordingSize[0] ? `${recordingSize[0]} × ${recordingSize[1]}` : "—";
   $("recording-dropped").textContent = status.recording_dropped_frames || 0;
+  $("recording-duplicated").textContent = status.recording_duplicated_frames || 0;
   $("recording-fps").textContent = status.recording_fps ? `${Number(status.recording_fps).toFixed(2)} FPS` : "—";
+  updateFpsDiagnostic(status.fps_diagnostic);
   if (!connected) stopPreview();
   if (status.last_error && status.last_error !== state.lastError) {
     state.lastError = status.last_error;
     logEvent(status.last_error, true);
   }
+}
+
+function updateFpsDiagnostic(diagnostic) {
+  const warning = $("fps-warning");
+  const active = Boolean(diagnostic?.active);
+  warning.hidden = !active;
+  if (active) {
+    warning.textContent = `采集帧率不足：目标 ${diagnostic.target_fps} FPS，实际 ${diagnostic.actual_fps} FPS。原因：${diagnostic.reason}。建议：${diagnostic.recommendation}。`;
+    if (!state.fpsWarningActive) {
+      showToast("实际采集帧率低于目标，请查看画面下方提示。", true);
+      logEvent(warning.textContent, true);
+    }
+  } else if (state.fpsWarningActive && diagnostic?.state === "ok") {
+    logEvent("实际采集帧率已恢复到目标范围。");
+  }
+  state.fpsWarningActive = active;
 }
 
 function applyFeature(id, feature, rangeId) {

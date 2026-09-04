@@ -16,6 +16,82 @@ from .config import MvsAppConfig, MvsConfigStore
 from .recording import VideoRecorder
 from .sdk import Frame, MvsCamera, MvsDeviceInfo, MvsError
 
+_FPS_WARNING_RATIO = 0.9
+_FPS_MIN_SAMPLES = 5
+
+
+def _diagnose_frame_rate(
+    *,
+    actual_fps: float,
+    target_fps: float,
+    sample_count: int,
+    width: int,
+    height: int,
+    transport: str,
+    exposure_us: float,
+    lost_packets: int,
+    dropped_frames: int,
+    duplicated_frames: int,
+) -> dict[str, Any]:
+    ratio = actual_fps / target_fps if actual_fps > 0 and target_fps > 0 else 0.0
+    common = {
+        "actual_fps": round(actual_fps, 2),
+        "target_fps": round(target_fps, 2),
+        "ratio": round(ratio, 3),
+        "duplicated_frames": duplicated_frames,
+    }
+    if target_fps <= 0 or sample_count < _FPS_MIN_SAMPLES:
+        return {
+            **common,
+            "state": "warming_up",
+            "active": False,
+            "reason": "正在收集帧率样本",
+            "recommendation": "",
+        }
+    if ratio >= _FPS_WARNING_RATIO:
+        return {
+            **common,
+            "state": "ok",
+            "active": False,
+            "reason": "实际采集速度达到目标范围",
+            "recommendation": "",
+        }
+
+    reasons: list[str] = []
+    frame_period_us = 1_000_000 / target_fps
+    if exposure_us >= frame_period_us:
+        reasons.append(
+            f"曝光时间 {exposure_us / 1000:.1f} ms 已超过目标帧周期 "
+            f"{frame_period_us / 1000:.1f} ms"
+        )
+    elif exposure_us >= frame_period_us * 0.9:
+        reasons.append("曝光时间接近目标帧周期，可能限制相机出图速度")
+    if lost_packets > 0:
+        reasons.append(f"已检测到 {lost_packets} 个丢包，网络传输不稳定")
+    if dropped_frames > 0:
+        reasons.append(f"录像编码队列已丢弃 {dropped_frames} 帧，编码速度不足")
+    if width * height >= 12_000_000:
+        connection = "GigE 网络带宽、" if transport == "GigE" else ""
+        reasons.append(
+            f"当前 {width}×{height} 分辨率数据量较大，可能受{connection}"
+            "像素转换、预览编码或主机性能限制"
+        )
+    elif not reasons:
+        reasons.append("相机实际出图或主机处理速度低于目标值，暂时无法唯一定位")
+
+    recommendation = "降低目标帧率或缩小 ROI/分辨率"
+    if exposure_us >= frame_period_us * 0.9:
+        recommendation += "，并缩短曝光时间"
+    if transport == "GigE":
+        recommendation += "；同时检查网卡速率、巨帧和丢包"
+    return {
+        **common,
+        "state": "warning",
+        "active": True,
+        "reason": "；".join(reasons),
+        "recommendation": recommendation,
+    }
+
 
 class MvsCameraService:
     """串行管理单台 MVS 相机，并向 Web 层提供线程安全操作。"""
@@ -33,6 +109,7 @@ class MvsCameraService:
         self._video_recorder = VideoRecorder(writer_factory=video_writer_factory)
         self._camera: MvsCamera | None = None
         self._device: MvsDeviceInfo | None = None
+        self._camera_parameters: dict[str, Any] = {}
         self._worker: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._lock = threading.RLock()
@@ -135,6 +212,7 @@ class MvsCameraService:
                 self._latest_jpeg = None
                 self._latest_frame_number = 0
                 self._latest_size = (0, 0)
+                self._camera_parameters = {}
                 self._lost_packets = 0
                 self._frame_times.clear()
                 self._frame_condition.notify_all()
@@ -142,7 +220,10 @@ class MvsCameraService:
 
     def get_parameters(self) -> dict[str, Any]:
         camera = self._require_camera()
-        return camera.get_parameters()
+        parameters = camera.get_parameters()
+        with self._lock:
+            self._camera_parameters = parameters
+        return parameters
 
     def apply_parameters(self, values: dict[str, Any]) -> dict[str, Any]:
         allowed = {
@@ -167,7 +248,10 @@ class MvsCameraService:
         }
         if not supported_values:
             return parameters
-        return camera.apply_parameters(supported_values)
+        parameters = camera.apply_parameters(supported_values)
+        with self._lock:
+            self._camera_parameters = parameters
+        return parameters
 
     def save_snapshot(self) -> str:
         with self._lock:
@@ -213,6 +297,7 @@ class MvsCameraService:
             if camera is None:
                 raise MvsError("相机尚未连接")
             parameters = camera.get_parameters()
+            self._camera_parameters = parameters
             frame_rate = parameters.get("frame_rate") or {}
             recording_fps = float(frame_rate.get("value", config.video_fps))
             if recording_fps <= 0:
@@ -260,6 +345,24 @@ class MvsCameraService:
                 if elapsed > 0:
                     fps = (len(self._frame_times) - 1) / elapsed
             width, height = self._latest_size
+            target_feature = self._camera_parameters.get("frame_rate") or {}
+            target_fps = float(target_feature.get("value", self._recording_fps))
+            exposure_feature = self._camera_parameters.get("exposure_us") or {}
+            exposure_us = float(exposure_feature.get("value", 0.0))
+            dropped_frames = self._video_recorder.dropped_frames
+            duplicated_frames = self._video_recorder.duplicated_frames
+            diagnostic = _diagnose_frame_rate(
+                actual_fps=fps,
+                target_fps=target_fps,
+                sample_count=len(self._frame_times),
+                width=width,
+                height=height,
+                transport=self._device.transport if self._device else "",
+                exposure_us=exposure_us,
+                lost_packets=self._lost_packets,
+                dropped_frames=dropped_frames,
+                duplicated_frames=duplicated_frames,
+            )
             return {
                 "connected": self._connected,
                 "streaming": self._streaming,
@@ -267,8 +370,10 @@ class MvsCameraService:
                 "recording": self._recording,
                 "recording_path": self._recording_path,
                 "recording_fps": self._recording_fps,
-                "recording_dropped_frames": self._video_recorder.dropped_frames,
+                "recording_dropped_frames": dropped_frames,
+                "recording_duplicated_frames": duplicated_frames,
                 "recording_size": self._video_recorder.output_size,
+                "fps_diagnostic": diagnostic,
                 "last_photo": self._last_photo,
                 "last_error": self._last_error,
                 "fps": round(fps, 2),

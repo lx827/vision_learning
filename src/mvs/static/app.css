@@ -79,6 +79,7 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .event-strip { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 7px 16px; border-top: 1px solid var(--border); }
 .event-strip span { flex: 0 0 auto; color: var(--muted); font-family: Consolas, monospace; font-size: 11px; }
 .event-strip p { min-width: 0; overflow: hidden; color: #4b5563; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.fps-warning { padding: 10px 16px; border-top: 1px solid #fecaca; color: #991b1b; background: #fef2f2; font-size: 13px; line-height: 1.55; }
 
 .section-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 16px; }
 .column { display: flex; flex-direction: column; gap: 16px; }

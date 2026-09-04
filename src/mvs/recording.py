@@ -64,6 +64,7 @@ class VideoRecorder:
         self._running = False
         self._error: Exception | None = None
         self._dropped_frames = 0
+        self._duplicated_frames = 0
         self._output_size = (0, 0)
 
     @property
@@ -75,6 +76,11 @@ class VideoRecorder:
     def output_size(self) -> tuple[int, int]:
         with self._lock:
             return self._output_size
+
+    @property
+    def duplicated_frames(self) -> int:
+        with self._lock:
+            return self._duplicated_frames
 
     def start(
         self,
@@ -92,6 +98,7 @@ class VideoRecorder:
             self._running = True
             self._error = None
             self._dropped_frames = 0
+            self._duplicated_frames = 0
             self._output_size = (0, 0)
             started_at = self._clock()
             self._worker = threading.Thread(
@@ -172,7 +179,9 @@ class VideoRecorder:
     ) -> None:
         writer = None
         previous_frame = None
+        previous_written = False
         frames_written = 0
+        duplicated_frames = 0
         try:
             while True:
                 target_queue = self._queue
@@ -186,6 +195,12 @@ class VideoRecorder:
                         while frames_written < target_frames:
                             writer.write(previous_frame)
                             frames_written += 1
+                            if previous_written:
+                                duplicated_frames += 1
+                            else:
+                                previous_written = True
+                        with self._lock:
+                            self._duplicated_frames = duplicated_frames
                     return
                 frame = fit_video_frame(
                     item.frame, max_width=max_width, max_height=max_height
@@ -201,6 +216,7 @@ class VideoRecorder:
                     with self._lock:
                         self._output_size = (width, height)
                     previous_frame = frame
+                    previous_written = False
                     continue
                 target_frames = max(
                     frames_written,
@@ -209,7 +225,14 @@ class VideoRecorder:
                 while frames_written < target_frames:
                     writer.write(previous_frame)
                     frames_written += 1
+                    if previous_written:
+                        duplicated_frames += 1
+                    else:
+                        previous_written = True
+                with self._lock:
+                    self._duplicated_frames = duplicated_frames
                 previous_frame = frame
+                previous_written = False
         except Exception as exc:
             with self._lock:
                 self._error = exc

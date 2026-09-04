@@ -8,7 +8,7 @@ import pytest
 
 from src.mvs.config import MvsAppConfig, MvsConfigStore
 from src.mvs.sdk import FloatFeature, Frame, MvsDeviceInfo, MvsError
-from src.mvs.service import MvsCameraService
+from src.mvs.service import MvsCameraService, _diagnose_frame_rate
 
 
 class FakeCamera:
@@ -89,6 +89,66 @@ def test_auto_capture_requires_connection(tmp_path: Path):
 
     with pytest.raises(MvsError, match="请先连接相机"):
         service.start_auto_capture()
+
+
+def test_frame_rate_warning_explains_large_gige_frames():
+    diagnostic = _diagnose_frame_rate(
+        actual_fps=2.23,
+        target_fps=15.5,
+        sample_count=10,
+        width=7008,
+        height=7000,
+        transport="GigE",
+        exposure_us=5000.0,
+        lost_packets=0,
+        dropped_frames=0,
+        duplicated_frames=20,
+    )
+
+    assert diagnostic["active"] is True
+    assert diagnostic["state"] == "warning"
+    assert diagnostic["target_fps"] == 15.5
+    assert diagnostic["actual_fps"] == 2.23
+    assert diagnostic["duplicated_frames"] == 20
+    assert "7008×7000" in diagnostic["reason"]
+    assert "GigE 网络带宽" in diagnostic["reason"]
+
+
+def test_frame_rate_warning_identifies_exposure_limit():
+    diagnostic = _diagnose_frame_rate(
+        actual_fps=5.0,
+        target_fps=20.0,
+        sample_count=10,
+        width=1920,
+        height=1080,
+        transport="USB3",
+        exposure_us=60000.0,
+        lost_packets=0,
+        dropped_frames=0,
+        duplicated_frames=0,
+    )
+
+    assert diagnostic["active"] is True
+    assert "超过目标帧周期" in diagnostic["reason"]
+    assert "缩短曝光时间" in diagnostic["recommendation"]
+
+
+def test_frame_rate_diagnostic_clears_when_target_is_met():
+    diagnostic = _diagnose_frame_rate(
+        actual_fps=14.2,
+        target_fps=15.0,
+        sample_count=10,
+        width=1920,
+        height=1080,
+        transport="GigE",
+        exposure_us=5000.0,
+        lost_packets=0,
+        dropped_frames=0,
+        duplicated_frames=0,
+    )
+
+    assert diagnostic["active"] is False
+    assert diagnostic["state"] == "ok"
 
 
 def test_unsupported_imaging_parameters_are_not_sent_to_sdk(tmp_path: Path):
