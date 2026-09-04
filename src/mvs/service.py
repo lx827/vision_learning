@@ -53,6 +53,7 @@ class MvsCameraService:
         self._next_auto_capture = 0.0
         self._recording = False
         self._recording_path = ""
+        self._recording_fps = 0.0
 
     @property
     def config(self) -> MvsAppConfig:
@@ -157,7 +158,16 @@ class MvsCameraService:
         if unknown:
             raise ValueError(f"未知相机参数：{', '.join(unknown)}")
         camera = self._require_camera()
-        return camera.apply_parameters(values)
+        parameters = camera.get_parameters()
+        capabilities = parameters.get("capabilities", {})
+        supported_values = {
+            name: value
+            for name, value in values.items()
+            if capabilities.get(name, False)
+        }
+        if not supported_values:
+            return parameters
+        return camera.apply_parameters(supported_values)
 
     def save_snapshot(self) -> str:
         with self._lock:
@@ -199,6 +209,14 @@ class MvsCameraService:
             if self._recording:
                 return self._recording_path
             config = self._config.capture
+            camera = self._camera
+            if camera is None:
+                raise MvsError("相机尚未连接")
+            parameters = camera.get_parameters()
+            frame_rate = parameters.get("frame_rate") or {}
+            recording_fps = float(frame_rate.get("value", config.video_fps))
+            if recording_fps <= 0:
+                recording_fps = config.video_fps
             directory = Path(config.video_dir)
             directory.mkdir(parents=True, exist_ok=True)
             suffix = config.video_format
@@ -209,10 +227,11 @@ class MvsCameraService:
             self._video_recorder.start(
                 path,
                 video_format=config.video_format,
-                fps=config.video_fps,
+                fps=recording_fps,
                 max_width=config.video_max_width,
                 max_height=config.video_max_height,
             )
+            self._recording_fps = recording_fps
             self._recording = True
             return str(path)
 
@@ -247,6 +266,7 @@ class MvsCameraService:
                 "auto_capture": self._auto_capture,
                 "recording": self._recording,
                 "recording_path": self._recording_path,
+                "recording_fps": self._recording_fps,
                 "recording_dropped_frames": self._video_recorder.dropped_frames,
                 "recording_size": self._video_recorder.output_size,
                 "last_photo": self._last_photo,

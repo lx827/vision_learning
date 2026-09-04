@@ -1,6 +1,7 @@
 const state = {
   config: null,
   devices: [],
+  parameters: null,
   status: { connected: false, auto_capture: false, recording: false },
   streamStarted: false,
   scanPromise: null,
@@ -88,7 +89,6 @@ function fillConfig(config) {
   $("jpeg-quality").value = config.capture.jpeg_quality;
   $("auto-interval").value = config.capture.auto_interval_seconds;
   $("video-format").value = config.capture.video_format;
-  $("video-fps").value = config.capture.video_fps;
 }
 
 function collectConfig() {
@@ -107,7 +107,6 @@ function collectConfig() {
       jpeg_quality: numberValue("jpeg-quality"),
       auto_interval_seconds: numberValue("auto-interval"),
       video_format: $("video-format").value,
-      video_fps: numberValue("video-fps"),
       preview_quality: state.config?.capture.preview_quality ?? 80,
     },
     server: state.config?.server || { host: "127.0.0.1", port: 8765 },
@@ -213,6 +212,7 @@ function updateStatus(status) {
   const recordingSize = status.recording_size || [0, 0];
   $("recording-size").textContent = recordingSize[0] ? `${recordingSize[0]} × ${recordingSize[1]}` : "—";
   $("recording-dropped").textContent = status.recording_dropped_frames || 0;
+  $("recording-fps").textContent = status.recording_fps ? `${Number(status.recording_fps).toFixed(2)} FPS` : "—";
   if (!connected) stopPreview();
   if (status.last_error && status.last_error !== state.lastError) {
     state.lastError = status.last_error;
@@ -237,6 +237,7 @@ function applyFeature(id, feature, rangeId) {
 async function loadParameters() {
   const payload = await api("/api/camera/parameters");
   const p = payload.parameters;
+  state.parameters = p;
   applyFeature("exposure-value", p.exposure_us, "exposure-range");
   applyFeature("gain-value", p.gain_db, "gain-range");
   applyFeature("fps-value", p.frame_rate, "fps-range");
@@ -252,23 +253,25 @@ async function loadParameters() {
 }
 
 function syncParameterControls() {
-  const capabilities = !elements.imagingFields.disabled;
-  $("exposure-value").disabled = !capabilities || $("exposure-mode").value !== "off";
-  $("gain-value").disabled = !capabilities || $("gain-mode").value !== "off";
-  $("fps-value").disabled = !capabilities || !$("fps-enabled").checked;
+  const connected = !elements.imagingFields.disabled;
+  const capabilities = state.parameters?.capabilities || {};
+  $("exposure-value").disabled = !connected || !capabilities.exposure_us || (capabilities.exposure_mode && $("exposure-mode").value !== "off");
+  $("gain-value").disabled = !connected || !capabilities.gain_db || (capabilities.gain_mode && $("gain-mode").value !== "off");
+  $("fps-value").disabled = !connected || !capabilities.frame_rate || (capabilities.frame_rate_enabled && !$("fps-enabled").checked);
 }
 
 async function applyParameters() {
-  const values = {
-    exposure_mode: $("exposure-mode").value,
-    gain_mode: $("gain-mode").value,
-    frame_rate_enabled: $("fps-enabled").checked,
-    white_balance_mode: $("white-balance-mode").value,
-  };
-  if (values.exposure_mode === "off") values.exposure_us = numberValue("exposure-value");
-  if (values.gain_mode === "off") values.gain_db = numberValue("gain-value");
-  if (values.frame_rate_enabled) values.frame_rate = numberValue("fps-value");
+  const capabilities = state.parameters?.capabilities || {};
+  const values = {};
+  if (capabilities.exposure_mode) values.exposure_mode = $("exposure-mode").value;
+  if (capabilities.exposure_us && (!capabilities.exposure_mode || values.exposure_mode === "off")) values.exposure_us = numberValue("exposure-value");
+  if (capabilities.gain_mode) values.gain_mode = $("gain-mode").value;
+  if (capabilities.gain_db && (!capabilities.gain_mode || values.gain_mode === "off")) values.gain_db = numberValue("gain-value");
+  if (capabilities.frame_rate_enabled) values.frame_rate_enabled = $("fps-enabled").checked;
+  if (capabilities.frame_rate && (!capabilities.frame_rate_enabled || values.frame_rate_enabled)) values.frame_rate = numberValue("fps-value");
+  if (capabilities.white_balance_mode) values.white_balance_mode = $("white-balance-mode").value;
   const payload = await api("/api/camera/parameters", { method: "PUT", body: JSON.stringify(values) });
+  state.parameters = payload.parameters;
   showToast("成像参数已应用");
   logEvent("曝光、增益、帧率和白平衡设置已写入相机。");
   return payload.parameters;
@@ -327,6 +330,13 @@ function bindEvents() {
   $("fps-enabled").addEventListener("change", syncParameterControls);
   elements.preview.addEventListener("error", () => {
     if (state.status.connected) logEvent("实时预览中断，正在等待重新连接。", true);
+  });
+  window.addEventListener("pagehide", () => {
+    if (!state.status.connected) return;
+    navigator.sendBeacon(
+      "/api/camera/disconnect",
+      new Blob(["{}"], { type: "application/json" }),
+    );
   });
 }
 

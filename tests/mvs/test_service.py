@@ -17,8 +17,18 @@ class FakeCamera:
         self.connected = False
         self.frame_number = 0
         self.parameters = {
-            "capabilities": {"exposure_us": True},
+            "capabilities": {
+                "exposure_us": True,
+                "gain_db": True,
+                "gain_mode": False,
+                "frame_rate": True,
+                "frame_rate_enabled": True,
+                "white_balance_mode": False,
+            },
             "exposure_us": FloatFeature(1000.0, 25.0, 20000.0).to_dict(),
+            "gain_db": FloatFeature(1.0, 0.0, 16.0).to_dict(),
+            "frame_rate": FloatFeature(7.5, 0.1, 30.0).to_dict(),
+            "frame_rate_enabled": True,
         }
 
     @staticmethod
@@ -79,6 +89,54 @@ def test_auto_capture_requires_connection(tmp_path: Path):
 
     with pytest.raises(MvsError, match="请先连接相机"):
         service.start_auto_capture()
+
+
+def test_unsupported_imaging_parameters_are_not_sent_to_sdk(tmp_path: Path):
+    service = make_service(tmp_path)
+    try:
+        service.connect()
+        result = service.apply_parameters(
+            {
+                "gain_mode": "continuous",
+                "gain_db": 2.0,
+                "white_balance_mode": "continuous",
+            }
+        )
+    finally:
+        service.disconnect()
+
+    assert result["applied"] == {"gain_db": 2.0}
+
+
+def test_recording_fps_follows_camera_frame_rate(tmp_path: Path):
+    writer_created = threading.Event()
+    writer_fps = []
+
+    class FakeWriter:
+        def __init__(self, path, fourcc, fps, size):
+            writer_fps.append(fps)
+            writer_created.set()
+
+        def isOpened(self):
+            return True
+
+        def write(self, frame):
+            pass
+
+        def release(self):
+            pass
+
+    service = make_service(tmp_path, video_writer_factory=FakeWriter)
+    try:
+        service.connect()
+        service.wait_for_jpeg(0, timeout=1.0)
+        service.start_recording()
+        assert writer_created.wait(timeout=1.0)
+        service.stop_recording()
+    finally:
+        service.disconnect()
+
+    assert writer_fps == [7.5]
 
 
 def test_device_enumeration_is_serialized(tmp_path: Path):
