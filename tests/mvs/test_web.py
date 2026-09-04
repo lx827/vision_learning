@@ -43,6 +43,20 @@ def test_health_devices_and_config_api():
     assert response.get_json()["config"]["camera"]["ip"] == "192.168.1.20"
 
 
+def test_region_and_output_size_controls_are_next_to_preview():
+    app = create_app(service=FakeWebService())
+
+    html = app.test_client().get("/").get_data(as_text=True)
+    tools_start = html.index('<aside class="region-tools"')
+    tools_end = html.index("</aside>", tools_start)
+    tools = html[tools_start:tools_end]
+
+    assert 'id="restore-full-roi-button"' in tools
+    assert 'id="output-max-width"' in tools
+    assert 'id="output-max-height"' in tools
+    assert "当前采集区域" in tools
+
+
 def test_mvs_error_is_returned_as_json():
     app = create_app(service=FakeWebService())
     response = app.test_client().post("/api/camera/connect")

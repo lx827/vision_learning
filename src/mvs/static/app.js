@@ -36,6 +36,7 @@ const elements = {
   drawRegionButton: $("draw-region-button"),
   applyRegionButton: $("apply-region-button"),
   clearRegionButton: $("clear-region-button"),
+  restoreFullRoiButton: $("restore-full-roi-button"),
   toast: $("toast"),
 };
 
@@ -218,6 +219,7 @@ function updateStatus(status) {
   elements.imagingFields.disabled = !connected;
   elements.roiFields.disabled = !connected;
   elements.drawRegionButton.disabled = !connected;
+  elements.restoreFullRoiButton.disabled = !connected;
   elements.autoButton.textContent = status.auto_capture ? "停止自动拍照" : "开始自动拍照";
   elements.recordButton.querySelector("span").textContent = status.recording ? "停止录像" : "开始录像";
   elements.recordButton.classList.toggle("active", Boolean(status.recording));
@@ -349,23 +351,16 @@ function alignCameraRegion(region) {
   const height = alignFeature(region.height, p.height);
   const currentOffsetX = Number(p.offset_x.value || 0);
   const currentOffsetY = Number(p.offset_y.value || 0);
-  const sensorWidth = Math.max(
-    Number(p.width.maximum) + currentOffsetX,
-    Number(p.width.value) + Number(p.offset_x.maximum),
-  );
-  const sensorHeight = Math.max(
-    Number(p.height.maximum) + currentOffsetY,
-    Number(p.height.value) + Number(p.offset_y.maximum),
-  );
+  const sensor = sensorDimensions();
   const offsetX = alignFromMinimum(
     currentOffsetX + region.x,
     p.offset_x,
-    Math.max(0, sensorWidth - width),
+    Math.max(0, sensor.width - width),
   );
   const offsetY = alignFromMinimum(
     currentOffsetY + region.y,
     p.offset_y,
-    Math.max(0, sensorHeight - height),
+    Math.max(0, sensor.height - height),
   );
   return {
     ...region,
@@ -490,7 +485,7 @@ function finishRegionDrag(event) {
     syncRoiControls();
     $("draw-help").textContent = "蓝框已按相机步长对齐，点击“应用框选”写入相机。";
   } else {
-    $("draw-help").textContent = "橙色虚线框不会裁图，点击“应用框选”保存处理区域。";
+    $("draw-help").textContent = "橙色虚线框不会裁图；当前版本只保存坐标，接入增强或检测后才会限定算法范围。";
   }
   updateRegionReadout(region);
   elements.selectionLayer.releasePointerCapture(event.pointerId);
@@ -547,11 +542,39 @@ async function loadParameters() {
   $("fps-enabled").checked = Boolean(p.frame_rate_enabled);
   syncParameterControls();
   syncRoiControls();
+  updateCurrentRoiText();
   if (!state.drawing && !state.draftRegion) {
     $("draw-help").textContent = $("draw-mode").value === "camera"
       ? "拖框后会按相机步长对齐，应用后框外不再采集。"
-      : "拖框后只保存处理坐标，完整画面继续保留。";
+      : "只保存算法区域坐标，完整画面保留；当前尚未接入处理算法。";
   }
+}
+
+function sensorDimensions() {
+  const p = state.parameters;
+  if (!p?.width || !p?.height || !p?.offset_x || !p?.offset_y) return null;
+  const offsetX = Number(p.offset_x.value || 0);
+  const offsetY = Number(p.offset_y.value || 0);
+  return {
+    width: Math.max(
+      Number(p.width.maximum) + offsetX,
+      Number(p.width.value) + Number(p.offset_x.maximum),
+    ),
+    height: Math.max(
+      Number(p.height.maximum) + offsetY,
+      Number(p.height.value) + Number(p.offset_y.maximum),
+    ),
+  };
+}
+
+function updateCurrentRoiText() {
+  const p = state.parameters;
+  const sensor = sensorDimensions();
+  if (!p?.width || !sensor) {
+    $("current-roi").textContent = "当前采集区域：—";
+    return;
+  }
+  $("current-roi").textContent = `当前采集区域：${p.width.value} × ${p.height.value}，传感器起点 X=${p.offset_x.value}、Y=${p.offset_y.value}；完整传感器 ${sensor.width} × ${sensor.height}`;
 }
 
 function syncParameterControls() {
@@ -612,7 +635,19 @@ async function applyRoi() {
   await pollStatus();
   renderRegions();
   showToast("相机 ROI 已应用");
-  logEvent(`相机采集 ROI 已设为 ${values.width} × ${values.height}${centered ? "，并已居中" : ""}。${clearedProcessingRegion ? "采集坐标已改变，原处理区域已清除。" : ""}`);
+  logEvent(`相机采集 ROI 已设为 ${payload.parameters.width.value} × ${payload.parameters.height.value}，传感器起点 X=${payload.parameters.offset_x.value}、Y=${payload.parameters.offset_y.value}。${clearedProcessingRegion ? "采集坐标已改变，原处理区域已清除。" : ""}`);
+}
+
+async function restoreFullRoi() {
+  const sensor = sensorDimensions();
+  if (!sensor) throw new Error("尚未读取完整传感器尺寸");
+  $("roi-width").value = sensor.width;
+  $("roi-height").value = sensor.height;
+  $("roi-centered").checked = true;
+  syncRoiControls();
+  await applyRoi();
+  showToast("已恢复完整画面");
+  logEvent(`相机已恢复完整采集画面 ${sensor.width} × ${sensor.height}。`);
 }
 
 async function applyDrawnRegion() {
@@ -696,6 +731,7 @@ function bindEvents() {
   $("scan-button").addEventListener("click", (event) => withBusy(event.currentTarget, scanDevices).catch(() => {}));
   $("save-config-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig()).catch(() => {}));
   $("save-output-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig("输出设置已保存")).catch(() => {}));
+  $("save-output-size-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig("输出尺寸已应用")).catch(() => {}));
   elements.connectButton.addEventListener("click", (event) => withBusy(event.currentTarget, connectOrDisconnect).catch(() => {}));
   elements.snapshotButton.addEventListener("click", (event) => withBusy(event.currentTarget, takeSnapshot).catch(() => {}));
   elements.autoButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleAutoCapture).catch(() => {}));
@@ -709,6 +745,7 @@ function bindEvents() {
   elements.clearRegionButton.addEventListener("click", (event) => withBusy(event.currentTarget, clearProcessingRegion).then(() => {
     event.currentTarget.disabled = !state.processingRegion;
   }).catch(() => {}));
+  elements.restoreFullRoiButton.addEventListener("click", (event) => withBusy(event.currentTarget, restoreFullRoi).catch(() => {}));
   $("draw-mode").addEventListener("change", () => {
     cancelDrawing();
     state.draftRegion = null;
@@ -716,7 +753,7 @@ function bindEvents() {
     updateRegionReadout($("draw-mode").value === "processing" ? state.processingRegion : null);
     $("draw-help").textContent = $("draw-mode").value === "camera"
       ? "拖框后会按相机步长对齐，应用后框外不再采集。"
-      : "拖框后只保存处理坐标，完整画面继续保留。";
+      : "只保存算法区域坐标，完整画面保留；当前尚未接入处理算法。";
     renderRegions();
   });
   elements.selectionLayer.addEventListener("pointerdown", startRegionDrag);

@@ -91,9 +91,11 @@
             <div class="region-actions">
               <button class="button" id="draw-region-button" type="button" disabled>开始框选</button>
               <button class="button primary" id="apply-region-button" type="button" disabled>应用框选</button>
+              <button class="button" id="restore-full-roi-button" type="button" disabled>恢复完整画面</button>
               <button class="button" id="clear-region-button" type="button" disabled>清除处理区域</button>
             </div>
             <p class="draw-help" id="draw-help">连接相机后，选择用途并在画面上拖动。</p>
+            <p class="current-roi" id="current-roi">当前采集区域：—</p>
             <dl class="region-readout">
               <dt>X</dt><dd id="selected-x">—</dd>
               <dt>Y</dt><dd id="selected-y">—</dd>
@@ -114,6 +116,16 @@
                 <button class="button" id="apply-roi-button" type="button">应用精确数值</button>
               </fieldset>
             </details>
+
+            <div class="output-size-tools">
+              <h4>预览、照片和录像尺寸</h4>
+              <div class="form-grid two-columns compact-grid">
+                <div class="field"><label for="output-max-width">最大宽度</label><input id="output-max-width" type="number" min="2" step="1"></div>
+                <div class="field"><label for="output-max-height">最大高度</label><input id="output-max-height" type="number" min="2" step="1"></div>
+              </div>
+              <p class="help">保持比例缩小，不改变相机ROI和取景范围。</p>
+              <button class="button" id="save-output-size-button" type="button">应用输出尺寸</button>
+            </div>
           </aside>
         </div>
         <div class="event-strip">
@@ -151,10 +163,8 @@
               <div class="field"><label for="auto-interval">自动拍照间隔（秒）</label><input id="auto-interval" type="number" min="0.2" step="0.1"></div>
               <div class="field"><label for="video-format">视频格式</label><select id="video-format"><option value="mp4">MP4</option><option value="avi">AVI</option></select></div>
               <div class="field full"><label for="video-dir">视频目录</label><input id="video-dir"></div>
-              <div class="field"><label for="output-max-width">输出最大宽度（px）</label><input id="output-max-width" type="number" min="2" step="1"></div>
-              <div class="field"><label for="output-max-height">输出最大高度（px）</label><input id="output-max-height" type="number" min="2" step="1"></div>
             </div>
-            <p class="help">输出宽高只缩小网页预览、照片和录像，不裁剪取景范围，也不会放大小图；程序会保持原始宽高比例放入这个范围。</p>
+            <p class="help">输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。</p>
             <button class="button" id="save-output-button" type="button">保存输出设置</button>
           </section>
         </div>
