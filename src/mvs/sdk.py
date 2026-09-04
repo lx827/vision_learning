@@ -317,7 +317,7 @@ class MvsCamera:
             ):
                 try:
                     result[output_name] = self._get_float(node).to_dict()
-                    result["capabilities"][output_name] = True
+                    result["capabilities"][output_name] = self._is_writable(node)
                 except MvsOperationError:
                     result["capabilities"][output_name] = False
             for output_name, node in (
@@ -327,14 +327,16 @@ class MvsCamera:
             ):
                 try:
                     result[output_name] = self._get_enum(node)
-                    result["capabilities"][output_name] = True
+                    result["capabilities"][output_name] = self._is_writable(node)
                 except MvsOperationError:
                     result["capabilities"][output_name] = False
             try:
                 result["frame_rate_enabled"] = self._get_bool(
                     "AcquisitionFrameRateEnable"
                 )
-                result["capabilities"]["frame_rate_enabled"] = True
+                result["capabilities"]["frame_rate_enabled"] = self._is_writable(
+                    "AcquisitionFrameRateEnable"
+                )
             except MvsOperationError:
                 result["capabilities"]["frame_rate_enabled"] = False
             return result
@@ -403,6 +405,15 @@ class MvsCamera:
     def _set_bool(self, node: str, value: Any) -> None:
         _, camera = self._require_open()
         _check(camera.MV_CC_SetBoolValue(node, bool(value)), f"设置 {node}")
+
+    def _is_writable(self, node: str) -> bool:
+        sdk, camera = self._require_open()
+        access_mode = sdk.MV_XML_AccessMode()
+        _check(
+            camera.MV_XML_GetNodeAccessMode(node, access_mode),
+            f"读取 {node} 访问权限",
+        )
+        return int(access_mode.value) in {int(sdk.AM_WO), int(sdk.AM_RW)}
 
     def _require_open(self) -> tuple[ModuleType, object]:
         if not self.is_connected or self._sdk is None or self._camera is None:
