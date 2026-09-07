@@ -1,4 +1,4 @@
-"""Non-blocking and race-free OpenCV video recording."""
+"""Shared non-blocking and race-free OpenCV video recording."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from typing import Any, Callable
 import cv2
 import numpy as np
 
-from .sdk import MvsError
+from src.mvs.sdk import MvsError
 
 
 @dataclass(frozen=True)

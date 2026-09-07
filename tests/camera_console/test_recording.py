@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import pytest
 
-from src.mvs.recording import VideoRecorder, fit_video_frame
+from src.camera_console.recording import VideoRecorder, fit_video_frame
 
 
 def test_fit_video_frame_limits_large_images_and_keeps_even_dimensions():

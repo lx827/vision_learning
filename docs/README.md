@@ -14,6 +14,7 @@
 面向需要准备数据、使用项目工具的读者。
 
 - [数据准备](guides/data_preparation.md) — YOLO 标注格式、数据集划分、格式转换、数据增强、标注工具与数据集推荐
+- [OBS DroidCam 临时采集](droidcam/obs_integration.md) — 手机来源接入、拍照、连续拍照与录像
 
 ## 接口参考 (api)
 

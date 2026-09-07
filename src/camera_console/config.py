@@ -1,4 +1,4 @@
-"""MVS 调试台配置模型与 YAML 持久化。"""
+"""共享相机控制台的配置模型与 YAML 持久化。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ from tempfile import NamedTemporaryFile
 from typing import Any
 
 import yaml
+
+from src.droidcam.config import DroidCamClientConfig, ObsDroidCamConfig
 
 
 @dataclass
@@ -31,8 +33,8 @@ class CameraConnectionConfig:
 class CaptureConfig:
     """照片、自动拍照、预览和录像配置。"""
 
-    photo_dir: str = "data/mvs/photos"
-    video_dir: str = "data/mvs/videos"
+    photo_dir: str = "data/camera/photos"
+    video_dir: str = "data/camera/videos"
     photo_format: str = "jpg"
     jpeg_quality: int = 95
     auto_interval_seconds: float = 5.0
@@ -54,7 +56,7 @@ class CaptureConfig:
         if not 0.1 <= self.video_fps <= 240:
             raise ValueError("录像帧率必须在 0.1～240 FPS 之间")
         if self.output_max_width < 2 or self.output_max_height < 2:
-            raise ValueError("输出最大宽高不能小于 2 像素")
+            raise ValueError("统一输出最大宽高不能小于 2 像素")
         if not 20 <= self.preview_quality <= 100:
             raise ValueError("预览质量必须在 20～100 之间")
         if not self.photo_dir.strip() or not self.video_dir.strip():
@@ -76,15 +78,22 @@ class ServerConfig:
 
 
 @dataclass
-class MvsAppConfig:
-    """MVS 调试台完整配置。"""
+class CameraConsoleConfig:
+    """相机调试台完整配置。"""
 
+    source_type: str = "mvs"
     camera: CameraConnectionConfig = field(default_factory=CameraConnectionConfig)
+    droidcam_client: DroidCamClientConfig = field(default_factory=DroidCamClientConfig)
+    obs_droidcam: ObsDroidCamConfig = field(default_factory=ObsDroidCamConfig)
     capture: CaptureConfig = field(default_factory=CaptureConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
 
     def validate(self) -> None:
+        if self.source_type not in {"mvs", "droidcam_client", "obs_droidcam"}:
+            raise ValueError("相机来源仅支持 mvs、droidcam_client 或 obs_droidcam")
         self.camera.validate()
+        self.droidcam_client.validate()
+        self.obs_droidcam.validate()
         self.capture.validate()
         self.server.validate()
 
@@ -92,18 +101,33 @@ class MvsAppConfig:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any] | None) -> "MvsAppConfig":
+    def from_dict(cls, data: dict[str, Any] | None) -> "CameraConsoleConfig":
         data = data or {}
         capture_data = dict(data.get("capture") or {})
-        # 兼容早期仅用于录像的配置键；保存时会自动迁移为 output_*。
+        # 兼容短期出现过的三套独立尺寸；统一时优先保留照片尺寸。
         for dimension in ("width", "height"):
-            legacy = f"video_max_{dimension}"
-            current = f"output_max_{dimension}"
-            if current not in capture_data and legacy in capture_data:
-                capture_data[current] = capture_data[legacy]
-            capture_data.pop(legacy, None)
+            output_key = f"output_max_{dimension}"
+            independent_keys = [
+                f"photo_max_{dimension}",
+                f"video_max_{dimension}",
+                f"preview_max_{dimension}",
+            ]
+            if output_key not in capture_data:
+                for key in independent_keys:
+                    if key in capture_data:
+                        capture_data[output_key] = capture_data[key]
+                        break
+            for key in independent_keys:
+                capture_data.pop(key, None)
+        source_type = str(data.get("source_type") or "mvs")
+        if source_type == "opencv":
+            source_type = "droidcam_client"
+        droidcam_data = data.get("droidcam_client") or data.get("standard_camera") or {}
         config = cls(
+            source_type=source_type,
             camera=CameraConnectionConfig(**(data.get("camera") or {})),
+            droidcam_client=DroidCamClientConfig(**droidcam_data),
+            obs_droidcam=ObsDroidCamConfig(**(data.get("obs_droidcam") or {})),
             capture=CaptureConfig(**capture_data),
             server=ServerConfig(**(data.get("server") or {})),
         )
@@ -111,21 +135,21 @@ class MvsAppConfig:
         return config
 
 
-class MvsConfigStore:
+class CameraConfigStore:
     """以原子替换方式读写调试台 YAML 配置。"""
 
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
 
-    def load(self) -> MvsAppConfig:
+    def load(self) -> CameraConsoleConfig:
         if not self.path.exists():
-            return MvsAppConfig()
+            return CameraConsoleConfig()
         data = yaml.safe_load(self.path.read_text(encoding="utf-8"))
         if data is not None and not isinstance(data, dict):
-            raise ValueError("MVS 配置文件顶层必须是映射")
-        return MvsAppConfig.from_dict(data)
+            raise ValueError("相机控制台配置文件顶层必须是映射")
+        return CameraConsoleConfig.from_dict(data)
 
-    def save(self, config: MvsAppConfig) -> None:
+    def save(self, config: CameraConsoleConfig) -> None:
         config.validate()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with NamedTemporaryFile(
@@ -142,3 +166,18 @@ class MvsConfigStore:
             )
             temporary = Path(handle.name)
         temporary.replace(self.path)
+
+
+# 兼容目录拆分前使用的类名。
+MvsAppConfig = CameraConsoleConfig
+MvsConfigStore = CameraConfigStore
+
+__all__ = [
+    "CameraConnectionConfig",
+    "CameraConsoleConfig",
+    "CameraConfigStore",
+    "CaptureConfig",
+    "MvsAppConfig",
+    "MvsConfigStore",
+    "ServerConfig",
+]

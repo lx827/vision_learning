@@ -1,13 +1,15 @@
-from src.mvs.config import MvsAppConfig
+from src.camera_console.config import CameraConsoleConfig
 from src.mvs.sdk import MvsError
-from src.mvs.web import _schedule_browser_open, create_app
+from src.camera_console.web import _camera_console_is_running, _schedule_browser_open, create_app
 
 
 class FakeWebService:
     def __init__(self):
-        self.config = MvsAppConfig()
+        self.config = CameraConsoleConfig()
+        self.enumerated_source = None
 
-    def enumerate_devices(self):
+    def enumerate_devices(self, source_type=None):
+        self.enumerated_source = source_type
         return [{"index": 0, "model": "FAKE-CAM", "serial": "T1", "ip": "192.168.1.20"}]
 
     def status(self):
@@ -17,7 +19,7 @@ class FakeWebService:
         raise MvsError("测试连接失败")
 
     def update_config(self, payload):
-        self.config = MvsAppConfig.from_dict(payload)
+        self.config = CameraConsoleConfig.from_dict(payload)
         return self.config.to_dict()
 
     def apply_roi(self, payload):
@@ -29,13 +31,21 @@ class FakeWebService:
     def clear_processing_region(self):
         return None
 
+    def wait_for_preview(self, sequence, timeout=2.0):
+        return sequence + 1, b"\xff\xd8preview", 1_700_000_000_000
+
 
 def test_health_devices_and_config_api():
-    app = create_app(service=FakeWebService())
+    service = FakeWebService()
+    app = create_app(service=service)
     client = app.test_client()
 
     assert client.get("/api/health").get_json()["ok"] is True
-    assert client.get("/api/devices").get_json()["devices"][0]["model"] == "FAKE-CAM"
+    assert (
+        client.get("/api/devices?source=droidcam_client").get_json()["devices"][0]["model"]
+        == "FAKE-CAM"
+    )
+    assert service.enumerated_source == "droidcam_client"
     payload = client.get("/api/config").get_json()["config"]
     payload["camera"]["ip"] = "192.168.1.20"
     response = client.put("/api/config", json=payload)
@@ -43,11 +53,11 @@ def test_health_devices_and_config_api():
     assert response.get_json()["config"]["camera"]["ip"] == "192.168.1.20"
 
 
-def test_region_and_output_size_controls_are_next_to_preview():
+def test_region_and_shared_output_size_controls_are_next_to_preview():
     app = create_app(service=FakeWebService())
 
     html = app.test_client().get("/").get_data(as_text=True)
-    tools_start = html.index('<aside class="region-tools"')
+    tools_start = html.index('<aside class="region-tools frame-source-only"')
     tools_end = html.index("</aside>", tools_start)
     tools = html[tools_start:tools_end]
 
@@ -55,6 +65,29 @@ def test_region_and_output_size_controls_are_next_to_preview():
     assert 'id="output-max-width"' in tools
     assert 'id="output-max-height"' in tools
     assert "当前采集区域" in tools
+
+
+def test_camera_source_selector_has_three_peer_sources_and_one_control_set():
+    app = create_app(service=FakeWebService())
+
+    html = app.test_client().get("/").get_data(as_text=True)
+
+    assert 'id="source-type"' in html
+    assert '<option value="mvs">MVS 工业相机</option>' in html
+    assert '<option value="droidcam_client">DroidCam 客户端</option>' in html
+    assert '<option value="obs_droidcam">OBS DroidCam</option>' in html
+    assert 'id="standard-camera-index"' in html
+    assert 'id="standard-width"' in html
+    assert 'id="standard-height"' in html
+    assert 'id="standard-fps"' in html
+    assert "只读取画面" in html
+    assert "obs-panel" not in html
+    assert html.count('id="snapshot-button"') == 1
+    assert html.count('id="auto-button"') == 1
+    assert html.count('id="record-button"') == 1
+    assert 'id="event-log"' in html
+    assert '<section class="panel stage"' in html
+    assert '<label for="video-dir" id="video-dir-label">视频目录</label>' in html
 
 
 def test_mvs_error_is_returned_as_json():
@@ -110,6 +143,18 @@ def test_unknown_route_remains_not_found():
     assert response.get_json()["ok"] is False
 
 
+def test_latest_frame_endpoint_exposes_sequence_and_capture_time():
+    app = create_app(service=FakeWebService())
+
+    response = app.test_client().get("/api/camera/frame?after=4")
+
+    assert response.status_code == 200
+    assert response.data == b"\xff\xd8preview"
+    assert response.headers["X-Frame-Sequence"] == "5"
+    assert response.headers["X-Frame-Captured-At-Ms"] == "1700000000000"
+    assert "no-store" in response.headers["Cache-Control"]
+
+
 def test_browser_open_is_scheduled_in_daemon_timer(monkeypatch):
     opened = []
     timers = []
@@ -127,11 +172,29 @@ def test_browser_open_is_scheduled_in_daemon_timer(monkeypatch):
             self.started = True
             self.callback(*self.args)
 
-    monkeypatch.setattr("src.mvs.web.threading.Timer", FakeTimer)
-    monkeypatch.setattr("src.mvs.web.webbrowser.open", opened.append)
+    monkeypatch.setattr("src.camera_console.web.threading.Timer", FakeTimer)
+    monkeypatch.setattr("src.camera_console.web.webbrowser.open", opened.append)
 
     _schedule_browser_open("http://127.0.0.1:8765")
 
     assert opened == ["http://127.0.0.1:8765"]
     assert timers[0].daemon is True
     assert timers[0].started is True
+
+
+def test_existing_camera_console_is_detected(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self):
+            return b'{"ok": true, "service": "camera-console"}'
+
+    monkeypatch.setattr(
+        "src.camera_console.web.urllib.request.urlopen", lambda *args, **kwargs: FakeResponse()
+    )
+
+    assert _camera_console_is_running("http://127.0.0.1:8765") is True

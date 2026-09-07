@@ -1,3 +1,4 @@
+/* Shared camera console layout. */
 :root {
   --background: #f5f5f5;
   --panel: #ffffff;
@@ -14,6 +15,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; min-width: 320px; min-height: 100%; }
 body { color: var(--text); background: var(--background); }
 button, input, select { font: inherit; }
@@ -39,6 +41,10 @@ main { display: flex; flex-direction: column; gap: 16px; }
 
 .form-grid { display: grid; gap: 10px 12px; }
 .connection-grid { grid-template-columns: minmax(220px, 2fr) 1fr 1fr; margin-top: 12px; }
+.obs-mode .connection-grid { grid-template-columns: 1fr 2fr; }
+.obs-mode .preview-workspace { grid-template-columns: 1fr; }
+.obs-mode .section-grid { grid-template-columns: 1fr; }
+.obs-mode .section-grid > .column:last-child { display: none; }
 .sdk-field { grid-column: span 2; }
 .two-columns { grid-template-columns: 1fr 1fr; }
 .field.full { grid-column: 1 / -1; }
@@ -107,9 +113,6 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .recording-badge { position: absolute; top: 12px; right: 12px; display: none; align-items: center; gap: 6px; padding: 5px 8px; color: #fff; border-radius: 4px; background: rgba(185, 28, 28, .9); font-size: 12px; }
 .recording-badge.active { display: flex; }
 .recording-badge span { width: 7px; height: 7px; border-radius: 50%; background: #fff; }
-.event-strip { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 7px 16px; border-top: 1px solid var(--border); }
-.event-strip span { flex: 0 0 auto; color: var(--muted); font-family: Consolas, monospace; font-size: 11px; }
-.event-strip p { min-width: 0; overflow: hidden; color: #4b5563; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .fps-warning { padding: 10px 16px; border-top: 1px solid #fecaca; color: #991b1b; background: #fef2f2; font-size: 13px; line-height: 1.55; }
 
 .section-grid { display: grid; grid-template-columns: 1fr 1fr; align-items: start; gap: 16px; }
@@ -119,6 +122,16 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .file-status dt { color: var(--muted); }
 .file-status dd { min-width: 0; margin: 0; }
 .file-status code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-log { margin-top: 12px; padding-top: 10px; border-top: 1px solid #e5e7eb; }
+.activity-log-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.activity-log h3 { margin: 0; font-size: 13px; }
+.log-clear { padding: 2px 6px; color: var(--muted); border: 0; background: transparent; font-size: 12px; }
+.log-clear:hover { color: var(--text); }
+#event-log { max-height: 150px; margin: 8px 0 0; padding: 0; overflow-y: auto; list-style: none; font-size: 12px; }
+#event-log li { display: grid; grid-template-columns: 65px minmax(0, 1fr); gap: 8px; padding: 4px 0; border-top: 1px solid #f0f1f3; }
+#event-log time { color: var(--muted); font-family: Consolas, monospace; }
+#event-log span { min-width: 0; overflow-wrap: anywhere; color: #4b5563; }
+#event-log li.error span { color: var(--coral); }
 .output-panel .button, .imaging-panel .button { margin-top: 12px; }
 
 .toast { position: fixed; left: 50%; bottom: 20px; z-index: 10; max-width: calc(100vw - 32px); padding: 9px 14px; color: #fff; border-radius: 4px; background: #166534; box-shadow: 0 3px 10px rgba(0, 0, 0, .2); transform: translate(-50%, 10px); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s; font-size: 13px; }
@@ -128,7 +141,7 @@ fieldset { margin: 0; padding: 0; border: 0; }
 @media (max-width: 800px) {
   .app { width: min(100% - 24px, 1200px); padding-top: 12px; }
   .header { align-items: flex-start; }
-  .connection-grid, .two-columns, .section-grid, .preview-workspace { grid-template-columns: 1fr; }
+  .connection-grid, .obs-mode .connection-grid, .two-columns, .section-grid, .preview-workspace { grid-template-columns: 1fr; }
   .sdk-field, .field.full { grid-column: auto; }
   .viewport { min-height: 300px; }
   .region-tools { border-top: 1px solid var(--border); border-left: 0; }

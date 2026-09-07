@@ -13,17 +13,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 def main() -> None:
-    from src.mvs.config import MvsConfigStore
-    from src.mvs.service import MvsCameraService
+    from src.camera_console.config import CameraConfigStore
+    from src.camera_console.service import FrameCameraService
 
     parser = argparse.ArgumentParser(description="检查 MVS SDK、设备连接和单帧采集")
-    parser.add_argument("--config", default="configs/mvs/camera.yaml")
+    parser.add_argument("--config", default="configs/camera/camera.yaml")
     parser.add_argument(
         "--snapshot", action="store_true", help="成功取帧后保存一张测试照片"
     )
     args = parser.parse_args()
 
-    service = MvsCameraService(MvsConfigStore(args.config))
+    service = FrameCameraService(CameraConfigStore(args.config))
     print(
         json.dumps(
             {"devices": service.enumerate_devices()}, ensure_ascii=False, indent=2

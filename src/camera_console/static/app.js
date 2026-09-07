@@ -1,9 +1,15 @@
+// Shared controls for MVS, DroidCam Client, and OBS DroidCam.
 const state = {
   config: null,
   devices: [],
   parameters: null,
   status: { connected: false, auto_capture: false, recording: false },
   streamStarted: false,
+  previewGeneration: 0,
+  previewController: null,
+  previewObjectUrl: "",
+  previewSequence: -1,
+  browserFrameTimes: [],
   scanPromise: null,
   fpsWarningActive: false,
   lastError: "",
@@ -40,6 +46,61 @@ const elements = {
   toast: $("toast"),
 };
 
+function isMvsSource() {
+  return $("source-type").value === "mvs";
+}
+
+function isDroidCamClient() {
+  return $("source-type").value === "droidcam_client";
+}
+
+function isObsSource() {
+  return $("source-type").value === "obs_droidcam";
+}
+
+function isFrameSource() {
+  return !isObsSource();
+}
+
+function updateSourceUi() {
+  const mvs = isMvsSource();
+  const client = isDroidCamClient();
+  const obs = isObsSource();
+  document.body.classList.toggle("obs-mode", obs);
+  document.querySelectorAll(".mvs-only").forEach((element) => {
+    element.hidden = !mvs;
+  });
+  document.querySelectorAll(".client-only").forEach((element) => {
+    element.hidden = !client;
+  });
+  document.querySelectorAll(".frame-source-only").forEach((element) => {
+    element.hidden = obs;
+  });
+  $("camera-roi-option").disabled = !mvs;
+  if (!mvs && $("draw-mode").value === "camera") {
+    $("draw-mode").value = "processing";
+  }
+  $("connection-help").textContent = mvs
+    ? "IP 只用于选择已枚举的 MVS 相机，不会修改相机网络配置。"
+    : client
+      ? "通过 DroidCam Client 的 Windows 虚拟摄像头读取画面。"
+      : "通过本机 OBS WebSocket 控制 DroidCam 输入；连接时自动准备仅含手机画面的专用场景。";
+  $("output-help").textContent = obs
+    ? "OBS 截图固定保存为 PNG；录像格式和尺寸沿用 OBS 设置，录像目录在每次开始时应用。"
+    : "输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。";
+  $("empty-state").textContent = obs
+    ? "连接 OBS 后在这里显示低帧率取景预览"
+    : "连接相机后在这里显示实时画面";
+  $("metric-browser-label").textContent = obs ? "网页刷新" : "浏览器";
+  $("metric-age-label").textContent = obs ? "预览耗时" : "帧龄";
+  $("video-dir-label").textContent = obs ? "本次录像目录" : "视频目录";
+  $("scan-button").textContent = obs ? "刷新 OBS 来源" : "刷新设备";
+  $("metric-lost-label").textContent = mvs ? "丢包" : "取帧错误";
+  $("draw-help").textContent = mvs && $("draw-mode").value === "camera"
+    ? "连接相机后拖框设置硬件 ROI。"
+    : "连接后可框选处理区域，完整画面仍然保留。";
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
@@ -72,9 +133,16 @@ function showToast(message, isError = false) {
 }
 
 function logEvent(message, isError = false) {
-  $("event-time").textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-  $("event-message").textContent = message;
-  $("event-message").style.color = isError ? "var(--coral)" : "";
+  const item = document.createElement("li");
+  item.classList.toggle("error", isError);
+  const timestamp = document.createElement("time");
+  timestamp.textContent = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  const content = document.createElement("span");
+  content.textContent = message;
+  item.append(timestamp, content);
+  const log = $("event-log");
+  log.prepend(item);
+  while (log.children.length > 50) log.lastElementChild.remove();
 }
 
 async function withBusy(button, operation) {
@@ -95,10 +163,18 @@ async function withBusy(button, operation) {
 
 function fillConfig(config) {
   state.config = config;
+  $("source-type").value = config.source_type || "mvs";
   $("camera-ip").value = config.camera.ip;
   $("camera-serial").value = config.camera.serial;
   $("sdk-path").value = config.camera.sdk_python_path;
   $("frame-timeout").value = config.camera.frame_timeout_ms;
+  const standard = config.droidcam_client || {};
+  $("standard-camera-index").value = standard.device_index ?? 0;
+  $("standard-width").value = standard.requested_width ?? 1280;
+  $("standard-height").value = standard.requested_height ?? 720;
+  $("standard-fps").value = standard.requested_fps ?? 30;
+  const obs = config.obs_droidcam || {};
+  $("device-select").dataset.obsSource = obs.source_name || "";
   $("photo-dir").value = config.capture.photo_dir;
   $("video-dir").value = config.capture.video_dir;
   $("photo-format").value = config.capture.photo_format;
@@ -107,15 +183,34 @@ function fillConfig(config) {
   $("video-format").value = config.capture.video_format;
   $("output-max-width").value = config.capture.output_max_width;
   $("output-max-height").value = config.capture.output_max_height;
+  updateSourceUi();
 }
 
 function collectConfig() {
   return {
+    source_type: $("source-type").value,
     camera: {
       ip: $("camera-ip").value.trim(),
       serial: $("camera-serial").value.trim(),
       sdk_python_path: $("sdk-path").value.trim(),
       frame_timeout_ms: numberValue("frame-timeout"),
+    },
+    droidcam_client: {
+      ...(state.config?.droidcam_client || {}),
+      device_index: numberValue("standard-camera-index"),
+      device_name: state.devices.find((device) => device.index === numberValue("standard-camera-index"))?.model
+        || state.config?.droidcam_client?.device_name
+        || "",
+      requested_width: numberValue("standard-width"),
+      requested_height: numberValue("standard-height"),
+      requested_fps: numberValue("standard-fps"),
+    },
+    obs_droidcam: {
+      ...(state.config?.obs_droidcam || {}),
+      source_name: isObsSource()
+        ? (state.devices[Number(elements.deviceSelect.value)]?.model || elements.deviceSelect.dataset.obsSource || "")
+        : (state.config?.obs_droidcam?.source_name || ""),
+      photo_prefix: state.config?.obs_droidcam?.photo_prefix || "phone",
     },
     capture: {
       ...(state.config?.capture || {}),
@@ -152,82 +247,187 @@ async function scanDevices() {
 }
 
 async function scanDevicesOnce() {
-  const payload = await api("/api/devices");
+  const source = $("source-type").value;
+  const payload = await api(`/api/devices?source=${encodeURIComponent(source)}`);
   state.devices = payload.devices;
   elements.deviceSelect.replaceChildren();
   if (!state.devices.length) {
     elements.deviceSelect.add(new Option("未发现相机", ""));
-    logEvent("未发现 MVS 相机，请检查供电、网线和网卡地址。", true);
+    logEvent(isMvsSource()
+      ? "未发现 MVS 相机，请检查供电、网线和网卡地址。"
+      : isDroidCamClient()
+        ? "未发现 DroidCam Client 摄像头，请确认客户端正在显示画面。"
+        : "未发现 OBS DroidCam 来源，请确认 OBS、WebSocket 和 DroidCam 插件已启用。", true);
     return;
   }
   state.devices.forEach((device, index) => {
-    const address = device.ip || device.serial;
-    elements.deviceSelect.add(new Option(`${device.model} · ${address}`, String(index)));
+    const detail = isMvsSource()
+      ? (device.ip || device.serial)
+      : isDroidCamClient()
+        ? (device.user_name || `编号 ${device.index}`)
+        : "OBS 输入源";
+    elements.deviceSelect.add(new Option(`${device.model} · ${detail}`, String(index)));
   });
-  const configured = state.devices.findIndex((device) =>
-    (state.config.camera.ip && device.ip === state.config.camera.ip) ||
-    (state.config.camera.serial && device.serial === state.config.camera.serial)
-  );
+  const configured = state.devices.findIndex((device) => isMvsSource()
+    ? ((state.config.camera.ip && device.ip === state.config.camera.ip)
+      || (state.config.camera.serial && device.serial === state.config.camera.serial))
+    : isDroidCamClient()
+      ? device.index === numberValue("standard-camera-index")
+      : device.model === (state.config.obs_droidcam?.source_name || elements.deviceSelect.dataset.obsSource));
   elements.deviceSelect.value = String(configured >= 0 ? configured : 0);
   selectDevice();
-  logEvent(`发现 ${state.devices.length} 台 MVS 相机。`);
+  const sourceLabel = isMvsSource() ? "台 MVS 相机" : isDroidCamClient() ? "个 DroidCam Client 摄像头" : "个 OBS DroidCam 来源";
+  logEvent(`发现 ${state.devices.length} ${sourceLabel}。`);
 }
 
 function selectDevice() {
   const device = state.devices[Number(elements.deviceSelect.value)];
   if (!device) return;
-  $("camera-ip").value = device.ip;
-  $("camera-serial").value = device.serial;
+  if (isMvsSource()) {
+    $("camera-ip").value = device.ip;
+    $("camera-serial").value = device.serial;
+  } else if (isDroidCamClient()) {
+    $("standard-camera-index").value = device.index;
+  } else {
+    elements.deviceSelect.dataset.obsSource = device.model;
+  }
 }
 
 async function connectOrDisconnect() {
   if (state.status.connected) {
     const payload = await api("/api/camera/disconnect", { method: "POST" });
     updateStatus(payload.status);
-    logEvent("相机已断开，SDK 资源已释放。");
+    logEvent(isMvsSource()
+      ? "MVS 相机已断开，SDK 资源已释放。"
+      : isDroidCamClient()
+        ? "DroidCam Client 已断开，OpenCV 读取句柄已释放。"
+        : "OBS DroidCam 控制已断开。");
     return;
   }
   await saveConfig("连接配置已保存");
   const payload = await api("/api/camera/connect", { method: "POST" });
   updateStatus(payload.status);
   startPreview();
-  await loadParameters();
-  logEvent(`已连接 ${payload.status.device.model}（${payload.status.device.ip || payload.status.device.serial}）。`);
+  if (isFrameSource()) await loadParameters();
+  const deviceDetail = payload.status.device.ip || payload.status.device.user_name || payload.status.device.serial;
+  logEvent(`已连接 ${payload.status.device.model}（${deviceDetail}）。`);
 }
 
 function startPreview() {
   if (state.streamStarted) return;
-  elements.preview.src = `/api/camera/stream?t=${Date.now()}`;
   state.streamStarted = true;
+  state.previewGeneration += 1;
+  state.previewSequence = -1;
+  state.browserFrameTimes = [];
+  state.previewController = new AbortController();
+  pullLatestFrames(state.previewGeneration, state.previewController.signal);
 }
 
 function stopPreview() {
-  elements.preview.removeAttribute("src");
   state.streamStarted = false;
+  state.previewGeneration += 1;
+  state.previewController?.abort();
+  state.previewController = null;
+  if (state.previewObjectUrl) URL.revokeObjectURL(state.previewObjectUrl);
+  state.previewObjectUrl = "";
+  elements.preview.removeAttribute("src");
+  $("metric-browser-fps").textContent = "0.0";
+  $("metric-frame-age").textContent = "—";
+}
+
+function displayPreviewBlob(blob, generation) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const previousUrl = state.previewObjectUrl;
+    const cleanup = () => {
+      elements.preview.removeEventListener("load", loaded);
+      elements.preview.removeEventListener("error", failed);
+    };
+    const loaded = () => {
+      cleanup();
+      if (previousUrl) URL.revokeObjectURL(previousUrl);
+      if (generation === state.previewGeneration) state.previewObjectUrl = objectUrl;
+      else URL.revokeObjectURL(objectUrl);
+      resolve();
+    };
+    const failed = () => {
+      cleanup();
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("浏览器无法解码实时预览帧"));
+    };
+    elements.preview.addEventListener("load", loaded);
+    elements.preview.addEventListener("error", failed);
+    elements.preview.src = objectUrl;
+  });
+}
+
+function updateBrowserPreviewMetrics(capturedAtMs) {
+  const now = Date.now();
+  state.browserFrameTimes.push(now);
+  state.browserFrameTimes = state.browserFrameTimes.filter((value) => now - value <= 2000);
+  let fps = 0;
+  if (state.browserFrameTimes.length >= 2) {
+    const elapsed = state.browserFrameTimes.at(-1) - state.browserFrameTimes[0];
+    if (elapsed > 0) fps = (state.browserFrameTimes.length - 1) * 1000 / elapsed;
+  }
+  $("metric-browser-fps").textContent = fps.toFixed(1);
+  $("metric-frame-age").textContent = capturedAtMs > 0 ? `${Math.max(0, now - capturedAtMs)} ms` : "—";
+}
+
+async function pullLatestFrames(generation, signal) {
+  try {
+    while (state.streamStarted && generation === state.previewGeneration && !signal.aborted) {
+      const response = await fetch(`/api/camera/frame?after=${state.previewSequence}`, {
+        cache: "no-store",
+        signal,
+      });
+      if (response.status === 204) continue;
+      if (!response.ok) throw new Error(`实时预览请求失败（HTTP ${response.status}）`);
+      const sequence = Number(response.headers.get("X-Frame-Sequence"));
+      const capturedAtMs = Number(response.headers.get("X-Frame-Captured-At-Ms"));
+      const blob = await response.blob();
+      if (signal.aborted || generation !== state.previewGeneration) return;
+      await displayPreviewBlob(blob, generation);
+      state.previewSequence = Number.isFinite(sequence) ? sequence : state.previewSequence + 1;
+      updateBrowserPreviewMetrics(capturedAtMs);
+      if (isObsSource()) await new Promise((resolve) => setTimeout(resolve, 180));
+    }
+  } catch (error) {
+    if (signal.aborted || generation !== state.previewGeneration) return;
+    state.streamStarted = false;
+    logEvent(`实时预览中断：${error.message}`, true);
+  }
 }
 
 function updateStatus(status) {
   state.status = status;
   const connected = Boolean(status.connected);
+  const mvs = isMvsSource();
   elements.stage.classList.toggle("online", connected);
   elements.connectionPill.classList.toggle("online", connected);
-  elements.connectionText.textContent = connected ? "相机在线" : "未连接";
-  elements.connectButton.querySelector("span").textContent = connected ? "断开相机" : "连接相机";
+  elements.connectionText.textContent = connected ? (isObsSource() ? "OBS 已连接" : "相机在线") : "未连接";
+  elements.connectButton.querySelector("span").textContent = connected
+    ? (isObsSource() ? "断开 OBS" : "断开相机")
+    : (isObsSource() ? "连接 OBS" : "连接相机");
   elements.snapshotButton.disabled = !connected;
   elements.autoButton.disabled = !connected;
   elements.recordButton.disabled = !connected;
-  elements.imagingFields.disabled = !connected;
-  elements.roiFields.disabled = !connected;
-  elements.drawRegionButton.disabled = !connected;
-  elements.restoreFullRoiButton.disabled = !connected;
+  elements.imagingFields.disabled = !connected || !mvs;
+  elements.roiFields.disabled = !connected || !mvs;
+  elements.drawRegionButton.disabled = !connected || !isFrameSource();
+  elements.restoreFullRoiButton.disabled = !connected || !mvs;
+  $("source-type").disabled = connected;
   elements.autoButton.textContent = status.auto_capture ? "停止自动拍照" : "开始自动拍照";
   elements.recordButton.querySelector("span").textContent = status.recording ? "停止录像" : "开始录像";
   elements.recordButton.classList.toggle("active", Boolean(status.recording));
   elements.recordingBadge.classList.toggle("active", Boolean(status.recording));
-  $("device-name").textContent = status.device ? `${status.device.model} / ${status.device.serial}` : "等待相机";
+  $("device-name").textContent = status.device
+    ? `${status.device.model}${status.device.user_name ? ` / ${status.device.user_name}` : ""}`
+    : "等待相机";
   $("metric-resolution").textContent = status.width ? `${status.width} × ${status.height}` : "—";
   $("metric-preview-resolution").textContent = status.preview_width ? `${status.preview_width} × ${status.preview_height}` : "—";
-  $("metric-fps").textContent = Number(status.fps || 0).toFixed(1);
+  $("metric-capture-fps").textContent = Number(status.capture_fps ?? status.fps ?? 0).toFixed(1);
+  $("metric-preview-fps").textContent = Number(status.preview_fps || 0).toFixed(1);
   $("metric-lost").textContent = status.lost_packets || 0;
   $("last-photo").textContent = status.last_photo || "—";
   $("last-photo").title = status.last_photo || "";
@@ -543,6 +743,10 @@ async function loadParameters() {
   syncParameterControls();
   syncRoiControls();
   updateCurrentRoiText();
+  if (!isMvsSource()) {
+    $("draw-help").textContent = "拖框可保存处理区域，完整画面保留；DroidCam 参数仍在其客户端中设置。";
+    return;
+  }
   if (!state.drawing && !state.draftRegion) {
     $("draw-help").textContent = $("draw-mode").value === "camera"
       ? "拖框后会按相机步长对齐，应用后框外不再采集。"
@@ -711,7 +915,9 @@ async function toggleRecording() {
   const path = state.status.recording ? "/api/recording/stop" : "/api/recording/start";
   const payload = await api(path, { method: "POST" });
   updateStatus(payload.status);
-  logEvent(payload.status.recording ? `录像已开始：${payload.path}` : `录像已停止：${payload.path || "未生成文件"}`);
+  logEvent(payload.status.recording
+    ? `录像已开始，保存目录：${$("video-dir").value}`
+    : `录像已停止：${payload.path || "未生成文件"}`);
 }
 
 async function pollStatus() {
@@ -728,6 +934,13 @@ async function pollStatus() {
 
 function bindEvents() {
   elements.deviceSelect.addEventListener("change", selectDevice);
+  $("source-type").addEventListener("change", () => {
+    updateSourceUi();
+    updateStatus(state.status);
+    state.devices = [];
+    elements.deviceSelect.replaceChildren(new Option("点击刷新枚举相机", ""));
+    withBusy($("scan-button"), scanDevices).catch(() => {});
+  });
   $("scan-button").addEventListener("click", (event) => withBusy(event.currentTarget, scanDevices).catch(() => {}));
   $("save-config-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig()).catch(() => {}));
   $("save-output-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig("输出设置已保存")).catch(() => {}));
@@ -736,6 +949,9 @@ function bindEvents() {
   elements.snapshotButton.addEventListener("click", (event) => withBusy(event.currentTarget, takeSnapshot).catch(() => {}));
   elements.autoButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleAutoCapture).catch(() => {}));
   elements.recordButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleRecording).catch(() => {}));
+  $("clear-log-button").addEventListener("click", () => {
+    $("event-log").replaceChildren();
+  });
   $("apply-parameters-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyParameters).catch(() => {}));
   $("apply-roi-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyRoi).catch(() => {}));
   elements.drawRegionButton.addEventListener("click", toggleDrawing);
@@ -786,7 +1002,7 @@ async function initialize() {
     updateStatus(statusPayload.status);
     if (statusPayload.status.connected) {
       startPreview();
-      await loadParameters();
+      if (isFrameSource()) await loadParameters();
     }
     await withBusy($("scan-button"), scanDevices);
   } catch (error) {

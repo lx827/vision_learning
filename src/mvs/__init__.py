@@ -1,6 +1,5 @@
-"""海康 MVS 相机采集与 Web 调试工具。"""
+"""海康 MVS SDK 相机适配。"""
 
-from .config import MvsAppConfig, MvsConfigStore
-from .service import MvsCameraService
+from .sdk import Frame, MvsCamera, MvsDeviceInfo, MvsError
 
-__all__ = ["MvsAppConfig", "MvsCameraService", "MvsConfigStore"]
+__all__ = ["Frame", "MvsCamera", "MvsDeviceInfo", "MvsError"]

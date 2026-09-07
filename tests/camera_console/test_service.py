@@ -7,9 +7,10 @@ import cv2
 import numpy as np
 import pytest
 
-from src.mvs.config import MvsAppConfig, MvsConfigStore
+from src.camera_console.config import CameraConfigStore, CameraConsoleConfig
 from src.mvs.sdk import FloatFeature, Frame, MvsDeviceInfo, MvsError
-from src.mvs.service import MvsCameraService, _diagnose_frame_rate, _resize_to_fit
+from src.camera_console.service import FrameCameraService, _diagnose_frame_rate, _resize_to_fit
+from src.droidcam.client import StandardCameraDeviceInfo
 
 
 class FakeCamera:
@@ -62,13 +63,13 @@ class FakeCamera:
         self.connected = False
 
 
-def make_service(tmp_path: Path, **kwargs) -> MvsCameraService:
-    store = MvsConfigStore(tmp_path / "camera.yaml")
-    config = MvsAppConfig()
+def make_service(tmp_path: Path, **kwargs) -> FrameCameraService:
+    store = CameraConfigStore(tmp_path / "camera.yaml")
+    config = CameraConsoleConfig()
     config.capture.photo_dir = str(tmp_path / "photos")
     config.capture.video_dir = str(tmp_path / "videos")
     store.save(config)
-    return MvsCameraService(store, camera_factory=FakeCamera, **kwargs)
+    return FrameCameraService(store, camera_factory=FakeCamera, **kwargs)
 
 
 def test_connect_preview_snapshot_and_disconnect(tmp_path: Path):
@@ -87,6 +88,77 @@ def test_connect_preview_snapshot_and_disconnect(tmp_path: Path):
         status = service.disconnect()
 
     assert status["connected"] is False
+
+
+def test_droidcam_client_source_keeps_processing_pipeline(
+    tmp_path: Path,
+):
+    class FakeStandardCamera:
+        def __init__(self, config):
+            self.config = config
+            self.connected = False
+            self.frame_number = 0
+
+        @staticmethod
+        def enumerate_devices(config):
+            return [
+                StandardCameraDeviceInfo(
+                    index=config.device_index,
+                    model="DroidCam test source",
+                    serial=str(config.device_index),
+                )
+            ]
+
+        def open(self):
+            self.connected = True
+            return self.enumerate_devices(self.config)[0]
+
+        def get_frame(self, timeout_ms=1000):
+            if not self.connected:
+                return None
+            time.sleep(0.01)
+            self.frame_number += 1
+            image = np.full((48, 64, 3), 90, dtype=np.uint8)
+            return Frame(image, self.frame_number, 64, 48, 0, 0)
+
+        def get_parameters(self):
+            return {
+                "capabilities": {},
+                "frame_rate": FloatFeature(30.0, 30.0, 30.0).to_dict(),
+                "controls_external": True,
+            }
+
+        def close(self):
+            self.connected = False
+
+    store = CameraConfigStore(tmp_path / "camera.yaml")
+    config = CameraConsoleConfig(source_type="droidcam_client")
+    config.capture.photo_dir = str(tmp_path / "photos")
+    config.capture.video_dir = str(tmp_path / "videos")
+    store.save(config)
+    service = FrameCameraService(
+        store,
+        standard_camera_factory=FakeStandardCamera,
+    )
+
+    assert service.enumerate_devices("droidcam_client")[0]["model"] == "DroidCam test source"
+    try:
+        connected = service.connect()
+        _, jpeg = service.wait_for_jpeg(0, timeout=1.0)
+        region = service.set_processing_region(
+            {"x": 4, "y": 5, "width": 20, "height": 10}
+        )
+        snapshot = Path(service.save_snapshot())
+        with pytest.raises(MvsError, match="不支持 MVS 硬件 ROI"):
+            service.apply_roi({"width": 32, "height": 24})
+    finally:
+        disconnected = service.disconnect()
+
+    assert connected["source_type"] == "droidcam_client"
+    assert jpeg is not None and jpeg.startswith(b"\xff\xd8")
+    assert region["width"] == 20
+    assert snapshot.name.startswith("camera_")
+    assert disconnected["connected"] is False
 
 
 def test_auto_capture_requires_connection(tmp_path: Path):
@@ -141,7 +213,34 @@ def test_snapshot_uses_shared_output_bounds(tmp_path: Path):
     assert image.shape[:2] == (24, 32)
 
 
-def test_processing_region_keeps_full_frame_and_is_cleared_by_camera_roi(tmp_path: Path):
+def test_preview_encoding_does_not_block_camera_capture(tmp_path: Path, monkeypatch):
+    encode_started = threading.Event()
+    allow_encode = threading.Event()
+    original_imencode = cv2.imencode
+
+    def blocking_imencode(*args, **kwargs):
+        encode_started.set()
+        allow_encode.wait(timeout=2.0)
+        return original_imencode(*args, **kwargs)
+
+    monkeypatch.setattr("src.camera_console.service.cv2.imencode", blocking_imencode)
+    service = make_service(tmp_path)
+    try:
+        service.connect()
+        assert encode_started.wait(timeout=1.0)
+        frame_before = service.status()["frame_number"]
+        time.sleep(0.08)
+        frame_after = service.status()["frame_number"]
+
+        assert frame_after > frame_before
+    finally:
+        allow_encode.set()
+        service.disconnect()
+
+
+def test_processing_region_keeps_full_frame_and_is_cleared_by_camera_roi(
+    tmp_path: Path,
+):
     service = make_service(tmp_path)
     try:
         service.connect()
@@ -174,9 +273,7 @@ def test_processing_region_cannot_exceed_current_frame(tmp_path: Path):
         service.connect()
         service.wait_for_jpeg(0, timeout=1.0)
         with pytest.raises(ValueError, match="不能超过"):
-            service.set_processing_region(
-                {"x": 50, "y": 10, "width": 20, "height": 20}
-            )
+            service.set_processing_region({"x": 50, "y": 10, "width": 20, "height": 20})
     finally:
         service.disconnect()
 
@@ -239,6 +336,25 @@ def test_frame_rate_diagnostic_clears_when_target_is_met():
 
     assert diagnostic["active"] is False
     assert diagnostic["state"] == "ok"
+
+
+def test_droidcam_warning_places_limit_before_web_preview():
+    diagnostic = _diagnose_frame_rate(
+        actual_fps=14.2,
+        target_fps=30.0,
+        sample_count=20,
+        width=1920,
+        height=1080,
+        transport="MediaFoundation",
+        exposure_us=0.0,
+        lost_packets=0,
+        dropped_frames=0,
+        duplicated_frames=0,
+    )
+
+    assert "限制发生在网页预览之前" in diagnostic["reason"]
+    assert "手机端 Target FPS" in diagnostic["recommendation"]
+    assert "With Stats" in diagnostic["recommendation"]
 
 
 def test_unsupported_imaging_parameters_are_not_sent_to_sdk(tmp_path: Path):
@@ -308,9 +424,9 @@ def test_device_enumeration_is_serialized(tmp_path: Path):
                 ConcurrentEnumerationCamera.active -= 1
             return FakeCamera.enumerate_devices(sdk_python_path)
 
-    store = MvsConfigStore(tmp_path / "camera.yaml")
-    store.save(MvsAppConfig())
-    service = MvsCameraService(store, camera_factory=ConcurrentEnumerationCamera)
+    store = CameraConfigStore(tmp_path / "camera.yaml")
+    store.save(CameraConsoleConfig())
+    service = FrameCameraService(store, camera_factory=ConcurrentEnumerationCamera)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(executor.map(lambda _: service.enumerate_devices(), range(2)))
