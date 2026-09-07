@@ -89,7 +89,7 @@ function updateSourceUi() {
     ? "OBS 截图固定保存为 PNG；录像格式和尺寸沿用 OBS 设置，录像目录在每次开始时应用。"
     : "输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。";
   $("empty-state").textContent = obs
-    ? "连接 OBS 后在这里显示低帧率取景预览"
+    ? "连接 OBS 后在这里显示实时取景预览"
     : "连接相机后在这里显示实时画面";
   $("metric-browser-label").textContent = obs ? "网页刷新" : "浏览器";
   $("metric-age-label").textContent = obs ? "预览耗时" : "帧龄";
@@ -390,7 +390,6 @@ async function pullLatestFrames(generation, signal) {
       await displayPreviewBlob(blob, generation);
       state.previewSequence = Number.isFinite(sequence) ? sequence : state.previewSequence + 1;
       updateBrowserPreviewMetrics(capturedAtMs);
-      if (isObsSource()) await new Promise((resolve) => setTimeout(resolve, 180));
     }
   } catch (error) {
     if (signal.aborted || generation !== state.previewGeneration) return;

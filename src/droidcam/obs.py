@@ -441,7 +441,7 @@ class ObsService:
         self._restore_recording_directory()
 
     def preview_frame(self, *, width: int = 960, quality: int = 70):
-        """Return a low-rate JPEG preview of the selected input source."""
+        """Return the latest JPEG preview of the selected input source."""
         with self._lock:
             source = self._require_source()
             requested_at_ms = int(time.time() * 1000)
