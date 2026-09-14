@@ -1,6 +1,13 @@
+from werkzeug.serving import WSGIRequestHandler
+
 from src.camera_console.config import CameraConsoleConfig
 from src.mvs.sdk import MvsError
-from src.camera_console.web import _camera_console_is_running, _schedule_browser_open, create_app
+from src.camera_console.web import (
+    _QuietCameraRequestHandler,
+    _camera_console_is_running,
+    _schedule_browser_open,
+    create_app,
+)
 
 
 class FakeWebService:
@@ -33,6 +40,31 @@ class FakeWebService:
 
     def wait_for_preview(self, sequence, timeout=2.0):
         return sequence + 1, b"\xff\xd8preview", 1_700_000_000_000
+
+
+def test_request_handler_only_suppresses_successful_high_frequency_requests(monkeypatch):
+    logged = []
+    monkeypatch.setattr(
+        WSGIRequestHandler,
+        "log_request",
+        lambda self, code="-", size="-": logged.append((self.path, code, size)),
+    )
+    handler = object.__new__(_QuietCameraRequestHandler)
+
+    for path in ("/api/camera/frame?after=10", "/api/camera/status"):
+        handler.path = path
+        handler.log_request(200, 123)
+        handler.log_request(204, 0)
+
+    handler.path = "/api/camera/frame?after=10"
+    handler.log_request(500, 0)
+    handler.path = "/api/camera/connect"
+    handler.log_request(200, 456)
+
+    assert logged == [
+        ("/api/camera/frame?after=10", 500, 0),
+        ("/api/camera/connect", 200, 456),
+    ]
 
 
 def test_health_devices_and_config_api():

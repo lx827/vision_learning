@@ -10,14 +10,32 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from flask import Flask, Response, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
+from werkzeug.serving import WSGIRequestHandler
 
 from .config import CameraConfigStore, CameraConsoleConfig
 from src.mvs.sdk import MvsError
 from .service import FrameCameraService
 from src.droidcam.obs import ObsError, ObsService
+
+
+class _QuietCameraRequestHandler(WSGIRequestHandler):
+    """隐藏高频成功轮询，同时保留操作请求和错误访问日志。"""
+
+    _QUIET_PATHS = {"/api/camera/frame", "/api/camera/status"}
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+        try:
+            status_code = int(str(code).split(maxsplit=1)[0])
+        except (TypeError, ValueError):
+            status_code = 0
+        path = urlsplit(getattr(self, "path", "")).path
+        if path in self._QUIET_PATHS and 200 <= status_code < 400:
+            return
+        super().log_request(code, size)
 
 
 def create_app(
@@ -361,6 +379,7 @@ def run(
         debug=False,
         threaded=True,
         use_reloader=False,
+        request_handler=_QuietCameraRequestHandler,
     )
 
 
@@ -374,4 +393,9 @@ def _camera_console_is_running(url: str, timeout: float = 0.8) -> bool:
     return payload.get("ok") is True and payload.get("service") == "camera-console"
 
 
-__all__ = ["_camera_console_is_running", "create_app", "run"]
+__all__ = [
+    "_QuietCameraRequestHandler",
+    "_camera_console_is_running",
+    "create_app",
+    "run",
+]
