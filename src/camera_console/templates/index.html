@@ -208,14 +208,14 @@
             <fieldset id="imaging-fields" disabled>
               <div class="form-grid two-columns">
                 <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
-                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small></div>
+                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small><small class="timing-advice" id="exposure-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示时序余量。</small></div>
                 <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
                 <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
                 <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">启用帧率限制</label></div>
-                <div class="field"><label for="fps-value">采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small></div>
+                <div class="field"><label for="fps-value">目标采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small><small class="timing-advice" id="fps-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示建议上限。</small></div>
                 <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
               </div>
-              <p class="help">启用并应用后，录像文件自动使用相机返回的同一帧率；设备或处理速度不足时会在页面明确提示。</p>
+              <p class="help">目标帧率是期望上限，不保证相机一定达到；曝光、传感器读出、传输和处理速度都会限制实际帧率。录像文件使用相机返回的同一目标帧率。</p>
               <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
             </fieldset>
           </section>

@@ -122,6 +122,27 @@ def test_camera_source_selector_has_three_peer_sources_and_one_control_set():
     assert '<label for="video-dir" id="video-dir-label">视频目录</label>' in html
 
 
+def test_exposure_and_fps_controls_include_linked_timing_guidance():
+    app = create_app(service=FakeWebService())
+    client = app.test_client()
+
+    html = client.get("/").get_data(as_text=True)
+    script = client.get("/static/app.js").get_data(as_text=True)
+
+    assert 'id="exposure-timing-advice"' in html
+    assert 'id="fps-timing-advice"' in html
+    assert html.count('class="timing-advice"') == 2
+    assert html.count('aria-live="polite"') >= 2
+    assert "目标采集/录像帧率（FPS）" in html
+    assert "function calculateExposureFpsTiming(exposureUs, targetFps)" in script
+    assert "const framePeriodUs = 1_000_000 / targetFps" in script
+    assert "const recommendedExposureUs = framePeriodUs * 0.9" in script
+    assert "const recommendedMaxFps = theoreticalMaxFps * 0.9" in script
+    assert 'ratio >= 0.899999 ? "warning"' in script
+    assert '$("exposure-value").addEventListener("input", updateExposureFpsGuidance)' in script
+    assert '$("fps-value").addEventListener("input", updateExposureFpsGuidance)' in script
+
+
 def test_mvs_error_is_returned_as_json():
     app = create_app(service=FakeWebService())
     response = app.test_client().post("/api/camera/connect")

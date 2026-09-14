@@ -412,6 +412,7 @@ function updateStatus(status) {
   elements.autoButton.disabled = !connected;
   elements.recordButton.disabled = !connected;
   elements.imagingFields.disabled = !connected || !mvs;
+  updateExposureFpsGuidance();
   elements.roiFields.disabled = !connected || !mvs;
   elements.drawRegionButton.disabled = !connected || !isFrameSource();
   elements.restoreFullRoiButton.disabled = !connected || !mvs;
@@ -720,6 +721,81 @@ function applyIntegerFeature(id, feature, rangeId) {
   $(rangeId).textContent = `${feature.minimum} — ${feature.maximum}，步长 ${feature.increment}`;
 }
 
+function calculateExposureFpsTiming(exposureUs, targetFps) {
+  if (!Number.isFinite(exposureUs) || !Number.isFinite(targetFps) || exposureUs <= 0 || targetFps <= 0) {
+    return null;
+  }
+  const framePeriodUs = 1_000_000 / targetFps;
+  const recommendedExposureUs = framePeriodUs * 0.9;
+  const theoreticalMaxFps = 1_000_000 / exposureUs;
+  const recommendedMaxFps = theoreticalMaxFps * 0.9;
+  const ratio = exposureUs / framePeriodUs;
+  const level = ratio >= 0.999999 ? "danger" : (ratio >= 0.899999 ? "warning" : (ratio <= 0.25 ? "info" : "ok"));
+  return {
+    level,
+    framePeriodUs,
+    recommendedExposureUs,
+    theoreticalMaxFps,
+    recommendedMaxFps,
+    ratio,
+  };
+}
+
+function setTimingAdvice(id, level, message) {
+  const advice = $(id);
+  advice.className = `timing-advice${level ? ` ${level}` : ""}`;
+  advice.textContent = message;
+}
+
+function updateExposureFpsGuidance() {
+  const capabilities = state.parameters?.capabilities || {};
+  if (elements.imagingFields.disabled || !state.parameters || !capabilities.exposure_us || !capabilities.frame_rate) {
+    setTimingAdvice("exposure-timing-advice", "", "连接支持成像参数的 MVS 相机后显示时序余量。");
+    setTimingAdvice("fps-timing-advice", "", "连接支持成像参数的 MVS 相机后显示建议上限。");
+    return;
+  }
+  const exposureIsAutomatic = capabilities.exposure_mode && $("exposure-mode").value !== "off";
+  const fpsLimitIsOff = capabilities.frame_rate_enabled && !$("fps-enabled").checked;
+
+  if (exposureIsAutomatic) {
+    setTimingAdvice("exposure-timing-advice", "warning", "自动曝光会改变曝光时长；光线不足时，实际帧率可能随曝光增加而下降。");
+    setTimingAdvice("fps-timing-advice", "warning", "需要稳定帧率时建议使用手动曝光，并让曝光短于目标帧周期。当前自动曝光无法保证目标 FPS。");
+    return;
+  }
+  if (fpsLimitIsOff) {
+    setTimingAdvice("exposure-timing-advice", "info", "帧率限制未启用；曝光越长，相机可输出的最高帧率越低。");
+    setTimingAdvice("fps-timing-advice", "info", "启用帧率限制后，这里会根据曝光时间显示可达到的建议上限。");
+    return;
+  }
+
+  const exposureUs = Number($("exposure-value").value);
+  const targetFps = Number($("fps-value").value);
+  const timing = calculateExposureFpsTiming(exposureUs, targetFps);
+  if (!timing) {
+    setTimingAdvice("exposure-timing-advice", "danger", "曝光时间和目标帧率都必须是大于 0 的数字。");
+    setTimingAdvice("fps-timing-advice", "danger", "曝光时间和目标帧率都必须是大于 0 的数字。");
+    return;
+  }
+
+  const exposureMs = exposureUs / 1000;
+  const periodMs = timing.framePeriodUs / 1000;
+  const recommendedExposureMs = timing.recommendedExposureUs / 1000;
+  if (timing.level === "danger") {
+    setTimingAdvice("exposure-timing-advice", "danger", `目标 ${targetFps.toFixed(1)} FPS 每帧只有 ${periodMs.toFixed(1)} ms；当前曝光 ${exposureMs.toFixed(1)} ms 已达到或超过帧周期，无法达到目标。`);
+  } else if (timing.level === "warning") {
+    setTimingAdvice("exposure-timing-advice", "warning", `目标 ${targetFps.toFixed(1)} FPS 的帧周期是 ${periodMs.toFixed(1)} ms；建议曝光不超过 ${recommendedExposureMs.toFixed(1)} ms，为读出和传输留出余量。`);
+  } else if (timing.level === "info") {
+    setTimingAdvice("exposure-timing-advice", "info", `当前曝光仅占帧周期的 ${(timing.ratio * 100).toFixed(0)}%，不会限制目标帧率；若画面偏暗，可在建议上限 ${recommendedExposureMs.toFixed(1)} ms 内增加曝光。`);
+  } else {
+    setTimingAdvice("exposure-timing-advice", "ok", `时序余量正常：${targetFps.toFixed(1)} FPS 建议曝光不超过 ${recommendedExposureMs.toFixed(1)} ms。`);
+  }
+  setTimingAdvice(
+    "fps-timing-advice",
+    timing.level,
+    `按当前 ${exposureMs.toFixed(1)} ms 曝光，理论上限 ${timing.theoreticalMaxFps.toFixed(1)} FPS；预留 10% 读出余量后建议目标不超过 ${timing.recommendedMaxFps.toFixed(1)} FPS。`,
+  );
+}
+
 async function loadParameters() {
   const payload = await api("/api/camera/parameters");
   const p = payload.parameters;
@@ -786,6 +862,7 @@ function syncParameterControls() {
   $("exposure-value").disabled = !connected || !capabilities.exposure_us || (capabilities.exposure_mode && $("exposure-mode").value !== "off");
   $("gain-value").disabled = !connected || !capabilities.gain_db || (capabilities.gain_mode && $("gain-mode").value !== "off");
   $("fps-value").disabled = !connected || !capabilities.frame_rate || (capabilities.frame_rate_enabled && !$("fps-enabled").checked);
+  updateExposureFpsGuidance();
 }
 
 function syncRoiControls() {
@@ -807,6 +884,7 @@ async function applyParameters() {
   if (capabilities.white_balance_mode) values.white_balance_mode = $("white-balance-mode").value;
   const payload = await api("/api/camera/parameters", { method: "PUT", body: JSON.stringify(values) });
   state.parameters = payload.parameters;
+  updateExposureFpsGuidance();
   showToast("成像参数已应用");
   logEvent("曝光、增益、帧率和白平衡设置已写入相机。");
   return payload.parameters;
@@ -978,6 +1056,8 @@ function bindEvents() {
   $("exposure-mode").addEventListener("change", syncParameterControls);
   $("gain-mode").addEventListener("change", syncParameterControls);
   $("fps-enabled").addEventListener("change", syncParameterControls);
+  $("exposure-value").addEventListener("input", updateExposureFpsGuidance);
+  $("fps-value").addEventListener("input", updateExposureFpsGuidance);
   $("roi-centered").addEventListener("change", syncRoiControls);
   elements.preview.addEventListener("error", () => {
     if (state.status.connected) logEvent("实时预览中断，正在等待重新连接。", true);

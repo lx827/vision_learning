@@ -53,6 +53,11 @@ input, select { width: 100%; min-height: 36px; padding: 6px 9px; color: var(--te
 input:focus, select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px rgba(37, 99, 235, .12); }
 input:disabled, select:disabled { color: #8b9098; background: #f3f4f6; }
 .field small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.timing-advice { min-height: 42px; padding: 6px 8px; border: 1px solid #dbe3ec; border-left-width: 3px; border-radius: 4px; background: #f8fafc; line-height: 1.4; }
+.timing-advice.info { color: #1e40af; border-color: #bfdbfe; background: #eff6ff; }
+.timing-advice.ok { color: #166534; border-color: #bbf7d0; background: #f0fdf4; }
+.timing-advice.warning { color: #92400e; border-color: #fde68a; background: #fffbeb; }
+.timing-advice.danger { color: #991b1b; border-color: #fecaca; background: #fef2f2; }
 .help { margin-top: 9px; color: var(--muted); font-size: 12px; }
 .checkbox-field { display: flex; align-items: center; gap: 8px; padding-top: 25px; }
 .checkbox-field input { width: 16px; min-height: 16px; }
