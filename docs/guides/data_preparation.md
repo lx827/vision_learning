@@ -41,85 +41,24 @@ dataset/
 
 ## 数据集划分
 
-使用数据划分工具将数据集划分为训练集、验证集、测试集：
+当前仓库没有自动划分数据集的脚本。请在导出标注时由标注平台完成划分，或自行把同名图片和 `.txt` 标签成对放入 `train`、`val`、`test` 目录。不要只移动图片而遗漏对应标签。
+
+## 标注格式转换
+
+当前仓库实现的是 **YOLO 检测标注 → X-AnyLabeling JSON**，便于在 X-AnyLabeling 中继续检查或编辑已有框。准备一个类别文件（每行一个类别名，行号即类别 ID），然后在项目根目录执行：
 
 ```bash
-python tools/data/split.py \
-    --data data/raw \
-    --output data/split \
-    --train 0.7 \
-    --val 0.2 \
-    --test 0.1
+python scripts/yolo_to_xanylabeling.py \
+    --images data/custom/train/images \
+    --labels data/custom/train/labels \
+    --classes data/custom/classes.txt
 ```
 
-**参数说明：**
-- `--data`: 原始数据集目录（包含 images 和 labels 子目录）
-- `--output`: 输出目录
-- `--train`: 训练集比例（默认 0.7）
-- `--val`: 验证集比例（默认 0.2）
-- `--test`: 测试集比例（默认 0.1）
-- `--seed`: 随机种子（默认 42）
-- `--move`: 移动文件（默认复制）
-
-## 格式转换
-
-### VOC 转 YOLO
-
-```bash
-python tools/data/convert.py \
-    --format voc \
-    --input data/voc \
-    --output data/yolo
-```
-
-**VOC 数据集结构：**
-
-```
-voc/
-├── Annotations/        # XML 标注文件
-└── JPEGImages/         # 图片文件
-```
-
-### COCO 转 YOLO
-
-```bash
-python tools/data/convert.py \
-    --format coco \
-    --input data/coco/annotations.json \
-    --images data/coco/images \
-    --output data/yolo
-```
-
-**COCO 数据集结构：**
-
-```
-coco/
-├── annotations.json    # COCO JSON 标注文件
-└── images/             # 图片文件
-```
+JSON 写入图片目录；默认跳过已有文件以保护手工标注，确需覆盖时增加 `--overwrite`。仓库目前没有 VOC/COCO 转 YOLO 脚本。
 
 ## 数据增强
 
-使用数据增强工具对数据集进行增强：
-
-```bash
-python tools/data/augment.py \
-    --data data/train \
-    --output data/train_augmented \
-    --num 2
-```
-
-**参数说明：**
-- `--data`: 数据集目录
-- `--output`: 输出目录
-- `--num`: 每张图片增强次数（默认 1）
-
-**支持的增强方法：**
-- 水平翻转、垂直翻转
-- 旋转、平移、缩放、剪切
-- HSV 颜色空间变换
-- 模糊、噪声
-- 随机擦除
+仓库没有生成增强图片副本的离线脚本。训练期间，`YOLOTrainer` 会读取 `configs/train.yaml` 的 `augment` 配置，并把 HSV、旋转、平移、缩放、剪切、透视、翻转、Mosaic 和 MixUp 等参数传给 Ultralytics。修改这些参数后直接启动训练即可，原始数据集不会被改写。
 
 ## 数据集配置文件
 
@@ -254,4 +193,4 @@ visualize_label(
 ## 下一步
 
 - 查看 [快速开始](../getting-started/quickstart.md) 了解如何使用准备好的数据集进行训练
-- 查看 [API 文档](../api/api_reference.md) 了解数据处理工具的详细使用说明
+- 查看 [API 文档](../api/api_reference.md) 了解训练模块和标注转换脚本的使用说明

@@ -14,7 +14,7 @@
 - [项目简介](#项目简介)
 - [当前功能](#当前功能)
 - [快速开始](#快速开始)
-- [MVS 相机调试台](#mvs-相机调试台)
+- [相机调试台](#相机调试台)
 - [项目结构](#项目结构)
 - [相机模块边界](#相机模块边界)
 - [文档](#文档)
@@ -42,11 +42,12 @@
 
 - **一键环境配置**: 自动检测 CUDA、安装依赖、验证环境
 - **完整工作流程**: 训练 → 验证 → 测试 → 评估 → 导出
-- **数据预处理**: 数据增强、格式转换、数据集划分
+- **数据与标注辅助**: Ultralytics 训练增强、COCO128 下载、YOLO 标注转 X-AnyLabeling JSON
 - **可视化分析**: 训练曲线、混淆矩阵、检测结果展示
 - **模型导出**: ONNX、TensorRT、OpenVINO 等格式
 - **配置驱动**: YAML 配置文件，支持多实验管理
 - **模块化设计**: 易于扩展和定制
+- **相机采集控制台**: 统一接入 MVS、DroidCam Client 与 OBS DroidCam
 
 ---
 
@@ -135,7 +136,7 @@ python scripts/camera_web.py
 
 相机取流、网页预览编码和录像编码分别在独立后台线程中执行。网页每次只请求最新预览帧，处理或显示跟不上时会跳过旧预览帧，不会在浏览器中排队播放过时画面。页面使用一组最大宽高统一控制预览、照片和录像；三类输出都等比例缩小，且不会放大较小的原图或裁剪取景范围。
 
-OBS DroidCam 预览通过选定输入源的低帧率 JPEG 截图提供，只用于取景，不参与最终拍照或录像。本机实测单次 OBS 截图 RPC 约 17～20 ms，网页限制在约 4～5 FPS；页面显示的“预览耗时”包含 RPC、HTTP 传输和浏览器解码，但不包含手机传到 OBS 之前的延迟。OBS 录像目录可在网页中逐次修改，开始录像时临时应用，停止后恢复 OBS 原目录。
+OBS DroidCam 预览通过选定输入源的 JPEG 截图提供，只用于取景，不参与最终拍照或录像。浏览器在上一帧显示完成后立即请求下一帧，不设置固定限速，也不会并发积压请求；实际刷新率取决于 OBS 截图、HTTP 传输和浏览器解码速度。页面显示的“预览耗时”不包含手机传到 OBS 之前的延迟。OBS 录像目录可在网页中逐次修改，开始录像时临时应用，停止后恢复 OBS 原目录。
 
 “相机采集 ROI”则直接通过 SDK 设置 `Width`、`Height`、`OffsetX` 和 `OffsetY`，只读取传感器上的指定区域，从源头减少传输与处理数据。页面会读取设备实际支持的范围和步长，应用时短暂停流并自动恢复；它与输出缩放互相独立。部分设备（包括当前虚拟相机）重新连接后会恢复全幅，需要连接后再次应用 ROI。
 
@@ -177,10 +178,6 @@ vision_learning/
 │   └── mvs/                   # 海康 MVS SDK 适配
 │
 ├── tools/                     # 工具目录
-│   ├── data/                  # 数据处理工具
-│   │   ├── augment.py         # 数据增强
-│   │   ├── convert.py         # 格式转换
-│   │   └── split.py           # 数据集划分
 │   ├── visualization/         # 可视化工具
 │   │   ├── curves.py          # 训练曲线
 │   │   ├── confusion.py       # 混淆矩阵
@@ -195,6 +192,7 @@ vision_learning/
 │   ├── setup_env.bat          # Windows 环境配置脚本
 │   ├── quick_start.py         # 快速开始脚本
 │   ├── download_data.py       # 数据集下载脚本
+│   ├── yolo_to_xanylabeling.py# YOLO 标注转 X-AnyLabeling JSON
 │   ├── mvs_probe.py           # MVS 设备与单帧冒烟检查
 │   ├── camera_web.py          # 启动共享相机控制台
 │   └── mvs_web.py             # 兼容旧启动命令
@@ -212,15 +210,17 @@ vision_learning/
 │   │   └── quickstart.md      #   快速开始
 │   ├── guides/                # 使用指南
 │   │   └── data_preparation.md#   数据准备
+│   ├── droidcam/              # DroidCam/OBS 集成说明与设计记录
 │   ├── api/                   # 接口参考
 │   │   └── api_reference.md   #   API 文档
 │   └── theory/                # 理论学习
 │       └── yolo_theory.md     #   YOLOv8 理论知识
 │
 ├── tests/                     # 测试目录
-│   ├── test_trainer.py        # 训练器测试
-│   ├── test_validator.py      # 验证器测试
-│   └── test_tools.py          # 工具测试
+│   ├── camera_console/        # 共享相机控制台测试
+│   ├── droidcam/              # DroidCam Client 与 OBS 测试
+│   ├── mvs/                   # MVS SDK 适配测试
+│   └── test_*.py              # YOLO 核心模块与工具测试
 │
 ├── data/                      # 数据目录（gitignore）
 ├── runs/                      # 运行输出目录（gitignore）
@@ -231,6 +231,7 @@ vision_learning/
 │
 ├── .gitignore                 # Git 忽略文件
 ├── requirements.txt           # Python 依赖列表
+├── requirements-obs.txt       # OBS 控制可选依赖
 ├── setup.py                   # 包安装配置
 ├── LICENSE                    # MIT 许可证
 └── README.md                  # 项目说明文档
@@ -261,6 +262,7 @@ src/
 - [快速开始](docs/getting-started/quickstart.md) - 5 分钟上手教程
 - [数据准备](docs/guides/data_preparation.md) - 数据集格式和准备方法
 - [API 文档](docs/api/api_reference.md) - 核心模块使用说明
+- [OBS DroidCam 临时采集](docs/droidcam/obs_integration.md) - 手机来源接入与验收记录
 - [YOLOv8 理论知识](docs/theory/yolo_theory.md) - 算法原理与公式推导
 - [学习路线](plan/plan.md) - 完整的 YOLO 学习路径
 
