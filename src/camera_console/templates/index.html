@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>相机采集控制台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div>
+        <h1>相机调试</h1>
+        <p>相机连接、画面预览与采集参数设置</p>
+      </div>
+      <div class="connection-status" id="connection-pill">
+        <span class="status-dot"></span>
+        <span id="connection-text">未连接</span>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="panel connection-panel">
+        <div class="panel-title">
+          <h2>相机连接</h2>
+          <button class="button" id="scan-button" type="button">刷新设备</button>
+        </div>
+        <div class="form-grid connection-grid">
+          <div class="field">
+            <label for="source-type">相机来源</label>
+            <select id="source-type">
+              <option value="mvs">MVS 工业相机</option>
+              <option value="droidcam_client">DroidCam 客户端</option>
+              <option value="obs_droidcam">OBS DroidCam</option>
+            </select>
+          </div>
+          <div class="field device-field">
+            <label for="device-select">已发现设备</label>
+            <select id="device-select"><option value="">点击刷新枚举相机</option></select>
+          </div>
+          <div class="field mvs-only">
+            <label for="camera-ip">相机 IP</label>
+            <input id="camera-ip" inputmode="decimal" autocomplete="off" placeholder="192.168.0.10">
+          </div>
+          <div class="field mvs-only">
+            <label for="camera-serial">序列号</label>
+            <input id="camera-serial" autocomplete="off" placeholder="可留空">
+          </div>
+          <div class="field sdk-field mvs-only">
+            <label for="sdk-path">SDK Python 封装路径（可留空）</label>
+            <input id="sdk-path" autocomplete="off" placeholder="自动从 MVCAM_COMMON_RUNENV 读取">
+          </div>
+          <div class="field timeout-field mvs-only">
+            <label for="frame-timeout">取帧超时（ms）</label>
+            <input id="frame-timeout" type="number" min="100" max="30000" step="100">
+          </div>
+          <div class="field client-only" hidden>
+            <label for="standard-camera-index">摄像头编号</label>
+            <input id="standard-camera-index" type="number" min="0" step="1">
+          </div>
+          <div class="field client-only" hidden>
+            <label for="standard-width">请求宽度</label>
+            <input id="standard-width" type="number" min="2" step="1">
+          </div>
+          <div class="field client-only" hidden>
+            <label for="standard-height">请求高度</label>
+            <input id="standard-height" type="number" min="2" step="1">
+          </div>
+          <div class="field client-only" hidden>
+            <label for="standard-fps">请求帧率（FPS）</label>
+            <input id="standard-fps" type="number" min="0.1" max="240" step="0.1">
+          </div>
+        </div>
+        <p class="help" id="connection-help">IP 只用于选择已枚举的相机，不会修改相机网络配置。</p>
+        <div class="actions">
+          <button class="button" id="save-config-button" type="button">保存配置</button>
+          <button class="button primary" id="connect-button" type="button"><span>连接相机</span></button>
+        </div>
+      </section>
+
+      <section class="panel stage" aria-label="实时相机画面">
+        <div class="preview-header">
+          <div>
+            <h2>实时画面</h2>
+            <span id="device-name">等待相机</span>
+          </div>
+          <div class="metrics">
+            <span class="frame-source-only">采集 <b id="metric-resolution">—</b></span>
+            <span class="frame-source-only">预览 <b id="metric-preview-resolution">—</b></span>
+            <span class="frame-source-only">采集 <b id="metric-capture-fps">0.0</b> FPS</span>
+            <span class="frame-source-only">后端预览 <b id="metric-preview-fps">0.0</b> FPS</span>
+            <span><span id="metric-browser-label">浏览器</span> <b id="metric-browser-fps">0.0</b> FPS</span>
+            <span><span id="metric-age-label">帧龄</span> <b id="metric-frame-age">—</b></span>
+            <span class="frame-source-only"><span id="metric-lost-label">丢包</span> <b id="metric-lost">0</b></span>
+          </div>
+        </div>
+        <div class="preview-workspace">
+          <div class="viewport" id="viewport">
+            <img id="preview-image" alt="相机实时画面">
+            <div class="selection-layer" id="selection-layer" aria-label="在实时画面上拖动框选区域">
+              <div class="region-box camera-region" id="camera-region-box" hidden><span>相机 ROI</span></div>
+              <div class="region-box processing-region" id="processing-region-box" hidden><span>处理区域</span></div>
+              <div class="region-box draft-region" id="draft-region-box" hidden></div>
+            </div>
+            <div class="empty-state" id="empty-state">连接相机后在这里显示实时画面</div>
+            <div class="recording-badge" id="recording-badge"><span></span>录像中</div>
+          </div>
+
+          <aside class="region-tools frame-source-only" aria-label="区域框选工具">
+            <h3>区域框选</h3>
+            <div class="field">
+              <label for="draw-mode">框选用途</label>
+              <select id="draw-mode">
+                <option value="camera" id="camera-roi-option">相机采集 ROI</option>
+                <option value="processing">处理区域（保留完整画面）</option>
+              </select>
+            </div>
+            <div class="region-actions">
+              <button class="button" id="draw-region-button" type="button" disabled>开始框选</button>
+              <button class="button primary" id="apply-region-button" type="button" disabled>应用框选</button>
+              <button class="button" id="restore-full-roi-button" type="button" disabled>恢复完整画面</button>
+              <button class="button" id="clear-region-button" type="button" disabled>清除处理区域</button>
+            </div>
+            <p class="draw-help" id="draw-help">连接相机后，选择用途并在画面上拖动。</p>
+            <p class="current-roi mvs-only" id="current-roi">当前采集区域：—</p>
+            <dl class="region-readout">
+              <dt>X</dt><dd id="selected-x">—</dd>
+              <dt>Y</dt><dd id="selected-y">—</dd>
+              <dt>宽</dt><dd id="selected-width">—</dd>
+              <dt>高</dt><dd id="selected-height">—</dd>
+            </dl>
+
+            <details class="precise-roi mvs-only">
+              <summary>精确输入相机 ROI</summary>
+              <fieldset id="roi-fields" disabled>
+                <div class="form-grid two-columns compact-grid">
+                  <div class="field"><label for="roi-width">宽度</label><input id="roi-width" type="number"><small id="roi-width-range">—</small></div>
+                  <div class="field"><label for="roi-height">高度</label><input id="roi-height" type="number"><small id="roi-height-range">—</small></div>
+                  <div class="field"><label for="roi-offset-x">偏移 X</label><input id="roi-offset-x" type="number"><small id="roi-offset-x-range">—</small></div>
+                  <div class="field"><label for="roi-offset-y">偏移 Y</label><input id="roi-offset-y" type="number"><small id="roi-offset-y-range">—</small></div>
+                  <div class="field checkbox-field full"><input id="roi-centered" type="checkbox" checked><label for="roi-centered">自动居中</label></div>
+                </div>
+                <button class="button" id="apply-roi-button" type="button">应用精确数值</button>
+              </fieldset>
+            </details>
+
+            <div class="output-size-tools frame-source-only">
+              <h4>统一输出尺寸</h4>
+              <div class="form-grid two-columns compact-grid">
+                <div class="field"><label for="output-max-width">最大宽度</label><input id="output-max-width" type="number" min="2" step="1"></div>
+                <div class="field"><label for="output-max-height">最大高度</label><input id="output-max-height" type="number" min="2" step="1"></div>
+              </div>
+              <p class="help">统一控制预览、照片和录像，保持比例缩小；不会放大原图，也不改变相机 ROI 和取景范围。</p>
+              <button class="button" id="save-output-size-button" type="button">应用输出尺寸</button>
+            </div>
+          </aside>
+        </div>
+        <div class="fps-warning" id="fps-warning" role="alert" hidden></div>
+      </section>
+
+      <div class="section-grid">
+        <div class="column">
+          <section class="panel capture-panel">
+            <h2>采集控制</h2>
+            <div class="actions capture-actions">
+              <button class="button primary" id="snapshot-button" type="button" disabled>手动拍照</button>
+              <button class="button" id="auto-button" type="button" disabled>开始自动拍照</button>
+              <button class="button danger" id="record-button" type="button" disabled><span>开始录像</span></button>
+            </div>
+            <dl class="file-status">
+              <dt>最近照片</dt><dd><code id="last-photo">—</code></dd>
+              <dt>录像文件</dt><dd><code id="recording-path">—</code></dd>
+              <dt class="frame-source-only">录像尺寸</dt><dd class="frame-source-only"><code id="recording-size">—</code></dd>
+              <dt class="frame-source-only">录像帧率</dt><dd class="frame-source-only"><code id="recording-fps">—</code></dd>
+              <dt class="frame-source-only">补帧数量</dt><dd class="frame-source-only"><code id="recording-duplicated">0</code></dd>
+              <dt class="frame-source-only">丢弃帧</dt><dd class="frame-source-only"><code id="recording-dropped">0</code></dd>
+            </dl>
+            <div class="activity-log">
+              <div class="activity-log-header">
+                <h3>运行日志</h3>
+                <button class="log-clear" id="clear-log-button" type="button">清空</button>
+              </div>
+              <ol id="event-log" aria-live="polite">
+                <li><time>--:--:--</time><span>页面已就绪，等待操作。</span></li>
+              </ol>
+            </div>
+          </section>
+
+          <section class="panel output-panel">
+            <div class="panel-title"><h2>输出设置</h2></div>
+            <div class="form-grid two-columns">
+              <div class="field frame-source-only"><label for="photo-format">照片格式</label><select id="photo-format"><option value="jpg">JPG</option><option value="png">PNG</option><option value="bmp">BMP</option></select></div>
+              <div class="field frame-source-only"><label for="jpeg-quality">JPG 质量</label><input id="jpeg-quality" type="number" min="1" max="100"></div>
+              <div class="field full"><label for="photo-dir">照片目录</label><input id="photo-dir"></div>
+              <div class="field"><label for="auto-interval">自动拍照间隔（秒）</label><input id="auto-interval" type="number" min="0.2" step="0.1"></div>
+              <div class="field frame-source-only"><label for="video-format">视频格式</label><select id="video-format"><option value="mp4">MP4</option><option value="avi">AVI</option></select></div>
+              <div class="field full"><label for="video-dir" id="video-dir-label">视频目录</label><input id="video-dir"></div>
+            </div>
+            <p class="help" id="output-help">输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。</p>
+            <button class="button" id="save-output-button" type="button">保存输出设置</button>
+          </section>
+        </div>
+
+        <div class="column">
+          <section class="panel imaging-panel frame-source-only">
+            <h2>成像参数</h2>
+            <p class="help client-only" id="standard-imaging-help" hidden>DroidCam 客户端模式只读取画面；镜头、曝光、对焦和白平衡请在 DroidCam 中设置。</p>
+            <fieldset id="imaging-fields" disabled>
+              <div class="form-grid two-columns">
+                <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small></div>
+                <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+                <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
+                <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">启用帧率限制</label></div>
+                <div class="field"><label for="fps-value">采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small></div>
+                <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
+              </div>
+              <p class="help">启用并应用后，录像文件自动使用相机返回的同一帧率；设备或处理速度不足时会在页面明确提示。</p>
+              <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
+            </fieldset>
+          </section>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

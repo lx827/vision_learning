@@ -1,0 +1,29 @@
+source_type: obs_droidcam
+camera:
+  ip: 10.64.155.5
+  serial: Vir52009733
+  sdk_python_path: ''
+  frame_timeout_ms: 1000
+droidcam_client:
+  device_index: 1
+  device_name: DroidCam Video
+  requested_width: 1920
+  requested_height: 1080
+  requested_fps: 30
+obs_droidcam:
+  source_name: DroidCam OBS
+  photo_prefix: phone
+capture:
+  photo_dir: data/camera/photos
+  video_dir: data/camera/videos
+  photo_format: jpg
+  jpeg_quality: 95
+  auto_interval_seconds: 1
+  video_format: mp4
+  video_fps: 15
+  output_max_width: 1920
+  output_max_height: 1080
+  preview_quality: 80
+server:
+  host: 127.0.0.1
+  port: 8765

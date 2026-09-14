@@ -1,6 +1,6 @@
 # 文档中心
 
-本目录收录 YOLOv8 阶段一学习项目的全部文档，按用途分为四类。
+本目录收录 YOLOv8 学习流程和相机采集控制台的文档，按用途分为五类。
 
 ## 入门上手 (getting-started)
 
@@ -13,7 +13,14 @@
 
 面向需要准备数据、使用项目工具的读者。
 
-- [数据准备](guides/data_preparation.md) — YOLO 标注格式、数据集划分、格式转换、数据增强、标注工具与数据集推荐
+- [数据准备](guides/data_preparation.md) — YOLO 标注格式、目录组织、训练增强、X-AnyLabeling 转换与数据集配置
+
+## 相机采集 (droidcam)
+
+面向使用共享相机控制台接入 DroidCam 与 OBS 的读者。
+
+- [OBS DroidCam 临时采集](droidcam/obs_integration.md) — 手机来源接入、拍照、连续拍照、录像与验收记录
+- [OBS 临时相机集成初始任务说明](droidcam/initial_integration_spec.md) — 保留的初始设计输入；当前行为以集成说明为准
 
 ## 接口参考 (api)
 
@@ -33,6 +40,7 @@
 |------|------|------|----------|
 | 入门上手 | getting-started | installation, quickstart | 环境搭建、第一次跑通流程 |
 | 使用指南 | guides | data_preparation | 数据集准备、标注与增强 |
+| 相机采集 | droidcam | obs_integration, initial_integration_spec | DroidCam/OBS 接入、设计与验收 |
 | 接口参考 | api | api_reference | 查阅模块/工具/命令行用法 |
 | 理论学习 | theory | yolo_theory | 理解算法原理与公式推导 |
 

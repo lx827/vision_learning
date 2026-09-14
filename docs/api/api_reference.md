@@ -9,7 +9,7 @@
 - [测试器 (YOLOTester)](#测试器-yolotester)
 - [评估器 (YOLOEvaluator)](#评估器-yoloevaluator)
 - [导出器 (YOLOExporter)](#导出器-yoloexporter)
-- [数据处理工具](#数据处理工具)
+- [标注转换脚本](#标注转换脚本)
 - [可视化工具](#可视化工具)
 
 ---
@@ -240,69 +240,18 @@ results = exporter.export_all(
 
 ---
 
-## 数据处理工具
+## 标注转换脚本
 
-### 数据增强 (DataAugmentor)
+仓库当前提供 YOLO 检测标注到 X-AnyLabeling JSON 的单向转换脚本。类别文件每行一个类别名，行号对应从 0 开始的类别 ID；默认不会覆盖图片目录中已有的 JSON。
 
-```python
-from tools.data.augment import DataAugmentor
-
-# 创建增强器
-augmentor = DataAugmentor()
-
-# 增强单张图片
-aug_image, aug_bboxes, aug_labels = augmentor.augment_image(
-    image, bboxes, class_labels
-)
-
-# 增强整个数据集
-augmentor.augment_dataset(
-    data_dir="data/train",
-    output_dir="data/train_augmented",
-    num_augmentations=2,
-)
+```bash
+python scripts/yolo_to_xanylabeling.py \
+    --images data/custom/train/images \
+    --labels data/custom/train/labels \
+    --classes data/custom/classes.txt
 ```
 
-### 格式转换 (DataConverter)
-
-```python
-from tools.data.convert import DataConverter
-
-# 创建转换器
-converter = DataConverter()
-
-# VOC 转 YOLO
-converter.voc_to_yolo(
-    voc_dir="data/voc",
-    output_dir="data/yolo",
-)
-
-# COCO 转 YOLO
-converter.coco_to_yolo(
-    coco_json="data/coco/annotations.json",
-    images_dir="data/coco/images",
-    output_dir="data/yolo",
-)
-```
-
-### 数据集划分 (DataSplitter)
-
-```python
-from tools.data.split import DataSplitter
-
-# 创建划分器
-splitter = DataSplitter()
-
-# 划分数据集
-stats = splitter.split_dataset(
-    data_dir="data/raw",
-    output_dir="data/split",
-    train_ratio=0.7,
-    val_ratio=0.2,
-    test_ratio=0.1,
-    seed=42,
-)
-```
+如需覆盖已有 JSON，显式增加 `--overwrite`。仓库目前没有独立的 VOC/COCO 转 YOLO、数据集划分或离线增强 API；训练时的数据增强由 `YOLOTrainer` 根据 `configs/train.yaml` 的 `augment` 配置交给 Ultralytics 执行。
 
 ---
 
@@ -541,6 +490,18 @@ python src/evaluator.py --config configs/val.yaml [--weights WEIGHTS] [--save SA
 
 ```bash
 python src/exporter.py --config configs/export.yaml [--weights WEIGHTS] [--format FORMAT] [--all]
+```
+
+### 标注转换
+
+```bash
+python scripts/yolo_to_xanylabeling.py --images IMAGES --labels LABELS --classes CLASSES [--overwrite]
+```
+
+### 相机控制台
+
+```bash
+python scripts/camera_web.py [--config CONFIG] [--no-browser]
 ```
 
 ---
