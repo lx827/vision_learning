@@ -1,0 +1,6 @@
+# Local scallop meat detection dataset; simulated targets on brush rollers.
+path: E:/A-codehub/vision_learning/data/scallop_meat
+train: train/images
+val: valid/images
+names:
+  0: scallop_meat
