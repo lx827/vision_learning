@@ -14,6 +14,7 @@
 面向需要准备数据、使用项目工具的读者。
 
 - [数据准备](guides/data_preparation.md) — YOLO 标注格式、目录组织、训练增强、X-AnyLabeling 转换与数据集配置
+- [仿真扇贝肉检测训练](guides/scallop_meat_training.md) — 本地 YOLOv8s 微调配置、数据范围与手动启动说明
 
 ## 相机采集 (droidcam)
 

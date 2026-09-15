@@ -1,0 +1,48 @@
+# 仿真扇贝肉单类别检测：从本地 YOLOv8s 预训练权重微调。
+# 在仓库根目录运行 src/trainer.py，并通过 --config 指定本文件。
+model:
+  name: weights/yolo/pytorch/yolov8s.pt
+
+data:
+  name: scallop_meat.yaml
+
+train:
+  epochs: 100
+  batch: 8                 # RTX 4060 Laptop 8GB 的起步设置，尚未实测训练显存
+  imgsz: 640
+  device: 0
+  workers: 2               # Windows 下减少数据加载进程数
+  pretrained: true
+  freeze: null             # 整个网络参与微调
+  optimizer: AdamW
+  lr0: 0.001
+  lrf: 0.01
+  weight_decay: 0.0005
+  warmup_epochs: 3.0
+  cos_lr: true
+  seed: 42
+  deterministic: true
+  val: true
+  save: true
+  save_period: -1
+  project: train
+  name: null               # 自动命名：scallop_meat_yolov8s_e100_日期
+  exist_ok: false
+  cache: false
+  amp: true
+  close_mosaic: 10
+  resume: false
+
+augment:
+  hsv_h: 0.015
+  hsv_s: 0.2
+  hsv_v: 0.2
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.2
+  shear: 0.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.5
+  mosaic: 0.3
+  mixup: 0.0
