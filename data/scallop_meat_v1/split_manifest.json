@@ -1,0 +1,549 @@
+{
+  "source_images": "data/camera_v1/photos",
+  "source_labels": "data/camera_v1/labels",
+  "selection": "Images whose YOLO label file is nonempty. All 73 label files were checked: every line has 5 fields and class id 0, and labels pair 1:1 with images. The 7 empty label files and their images are excluded.",
+  "split_method": "Sort the 66 selected image filenames, shuffle with Python random.Random(42), assign the first 50 (75%, rounded) to train and the remaining 16 to val. Split individual images at the user request.",
+  "classes": {
+    "0": "scallop_meat"
+  },
+  "excluded_empty_label_images": 7,
+  "capture_note": "Single continuous capture burst, 2026-09-24 19:16:43-19:17:20. Capture groups were not recorded this time.",
+  "limitations": "One capture session (2026-09-24), simulated scallop meat on brush rollers. Random image splitting places near-identical adjacent frames in both train and val, so validation metrics are optimistic and do not establish conveyor performance. No independent test set. Only camera_v1 was used; the 2026-09-14 data in data/scallop_meat was not merged in.",
+  "counts": {
+    "train_images": 50,
+    "train_boxes": 119,
+    "val_images": 16,
+    "val_boxes": 43
+  },
+  "files": [
+    {
+      "image": "mvs_20260924_191643_395303.jpg",
+      "label": "mvs_20260924_191643_395303.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "f1747b6245b539be422dca519726afe27212e829ce11abec0101e5a7ba21a883",
+      "label_sha256": "e71bcf73381dacbb113bf2fce62e01a2eb0b152b558e6e0f718f6b37bc3fccf1"
+    },
+    {
+      "image": "mvs_20260924_191645_936362.jpg",
+      "label": "mvs_20260924_191645_936362.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "84efbbcbaf59f7670932c00dc1c5f76ff4288ea46051727cdffa6455c9e2613b",
+      "label_sha256": "6c7604ed7fd01758ecc73bfaa644f43d0bd4a8f21feb8ae6e693e6b86d30a29d"
+    },
+    {
+      "image": "mvs_20260924_191647_474637.jpg",
+      "label": "mvs_20260924_191647_474637.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "263191096caa45ca4376b762b556f4add519af20d5282df972a77476bda56069",
+      "label_sha256": "9a65ba4758625710d54c9d14f130f21aab96e30d830bfaa40b7321e73ddc9399"
+    },
+    {
+      "image": "mvs_20260924_191648_475038.jpg",
+      "label": "mvs_20260924_191648_475038.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "ba5ac15c5cc00b5c6dbfd1a99ac9bac4dee5f319584b7abd518936ea0af5c4aa",
+      "label_sha256": "19684026f5ac685d7661d6d93f67780dbc094d3827592ad6c19b6abede80c285"
+    },
+    {
+      "image": "mvs_20260924_191648_994790.jpg",
+      "label": "mvs_20260924_191648_994790.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "079fafffa21e889c93633caae0f206706b78300395513a45c3b0b6375c79a137",
+      "label_sha256": "f646d2f44c49b03df3c78ee69ec6aabceff3359a5c2037b3e0575a0dae780d6e"
+    },
+    {
+      "image": "mvs_20260924_191649_496870.jpg",
+      "label": "mvs_20260924_191649_496870.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "99251f66aae5f2456b444f4539632727e683bbf6e58448713a44d1d9ac329dd9",
+      "label_sha256": "44f17807e9405782d82e504321bcd83bc5533c057a77a73fb0c428ec0c6cce86"
+    },
+    {
+      "image": "mvs_20260924_191650_014831.jpg",
+      "label": "mvs_20260924_191650_014831.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "275fb38bc94388e01d0bf4229cc7001322d358b4039adedc90b83048341fd534",
+      "label_sha256": "312217c550fb80e2e23cc6724dfa8190a14898f07fd60784d123b8e86258d3ed"
+    },
+    {
+      "image": "mvs_20260924_191650_535347.jpg",
+      "label": "mvs_20260924_191650_535347.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "90d2b103a10b8e114f7a21ec94074d61e997bfd6f09955b313bae331849cc3ec",
+      "label_sha256": "1d938d07e8d7e52a7739f7c9f4d717e6706ec4197ce359e9c9580c0cc475c3d9"
+    },
+    {
+      "image": "mvs_20260924_191652_094794.jpg",
+      "label": "mvs_20260924_191652_094794.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "c652af943f4b2f5b1dd19335b22f09f9713f59cb17d371fe4d337d7df55ee3a5",
+      "label_sha256": "285fb5dba7d1b2c2ff5618da02169f38861e47bbcb81d4d7ef99229069bd6ede"
+    },
+    {
+      "image": "mvs_20260924_191652_595522.jpg",
+      "label": "mvs_20260924_191652_595522.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "847fe2ae1b58dbaf5d71be36e6a137749fffeed0e08a3d0b04931d6481a8dc5a",
+      "label_sha256": "62e73705aee9975b077dea02131fceb4285c6b20bd625dded005bcf2f1b4976b"
+    },
+    {
+      "image": "mvs_20260924_191653_115147.jpg",
+      "label": "mvs_20260924_191653_115147.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "8bbcace17891a22b091ac3baf83ca4d203785e86819a5b72bbde79200bd19e95",
+      "label_sha256": "bb48f25d6665f8aff2a93cc880087c9f84b62682402a32e86b5d3fcc18e92303"
+    },
+    {
+      "image": "mvs_20260924_191653_615148.jpg",
+      "label": "mvs_20260924_191653_615148.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "ef5b4aec5b909b4013aed9154a99c292864cf74b19dbb16d47415189927fd8a3",
+      "label_sha256": "63a7169dd7b0daa4a7b1deff188938be939af4b39dbdbb450de938c71f2996ca"
+    },
+    {
+      "image": "mvs_20260924_191654_115453.jpg",
+      "label": "mvs_20260924_191654_115453.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "b8249d421d8cf5a080c7c12f650777977e04c73522cf180133f4fac6609316d8",
+      "label_sha256": "6633e8ed0412973b8bfcab76e1e087c559d7d716cb26f7768baebc8bc0afedee"
+    },
+    {
+      "image": "mvs_20260924_191654_615993.jpg",
+      "label": "mvs_20260924_191654_615993.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "b14d58dc8e7b1c7ab0a4a7f226cc1694761fc91c0881132259597f3d94ab0883",
+      "label_sha256": "8e98decc70f75c49d79a9383deaa0ef18b1a9c5126194bd3fd755e9fa8a5ab47"
+    },
+    {
+      "image": "mvs_20260924_191655_134891.jpg",
+      "label": "mvs_20260924_191655_134891.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "b9383cbd0c2070e5b928d7adaef8f741d54a05fb221e49981a2c99b7e21880f8",
+      "label_sha256": "a8b19e1cd6794791b66193be6090dab89b5fb9654e487e78cf68049886398871"
+    },
+    {
+      "image": "mvs_20260924_191655_637293.jpg",
+      "label": "mvs_20260924_191655_637293.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "ade3c0b5e2cfb3533ce15cfd51e9c362390e7a3c84c4c772fcd9374269aac069",
+      "label_sha256": "36a29d5315ab93b7f0ae0ea74e6d514b0ac0a2001f3210a5641387fddbb176cb"
+    },
+    {
+      "image": "mvs_20260924_191656_155420.jpg",
+      "label": "mvs_20260924_191656_155420.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "dd50c653be0f72907d549e182d52e2dc8b70941804d49fc6d613d8d9eae706d6",
+      "label_sha256": "61518094a3d72963cf02999b7e3dc96bddaad601f237437f5bc5be52fb461072"
+    },
+    {
+      "image": "mvs_20260924_191656_655843.jpg",
+      "label": "mvs_20260924_191656_655843.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "d377f0492d8adfe0b29d5cfc1709e30beef560cfd60e5e5668525e05b24db354",
+      "label_sha256": "f51cf6830060d0beaec515aced8c1a22f3b1c5673fa4a06dea02d84b59eae853"
+    },
+    {
+      "image": "mvs_20260924_191657_156466.jpg",
+      "label": "mvs_20260924_191657_156466.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "9f26db85f87b070e3666f2bcd85aa3b831eb24d8ffb5ac148a85303337a3c8b9",
+      "label_sha256": "02e4b23c4a9667b80463442e3229b91ae657622fdf5dcd9aa90e2d3d522fbc81"
+    },
+    {
+      "image": "mvs_20260924_191658_175976.jpg",
+      "label": "mvs_20260924_191658_175976.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "6a88f1a97e8a97af5e0deec824eedaf7c959fabec99029edf074c9b5e37ee259",
+      "label_sha256": "4f59d827dd6d1ba23270a0ba67baff31693e605f073ecd690cf57681b2bd9526"
+    },
+    {
+      "image": "mvs_20260924_191658_676876.jpg",
+      "label": "mvs_20260924_191658_676876.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "c420bfd18c7ec9d60bd28dc21dbe473f6feeacaa342182515cbac5d12a133683",
+      "label_sha256": "920c9d6c5a7260b8dc4d0ffa87fe8a799eaab49dfb054d9620ce557e69d12e96"
+    },
+    {
+      "image": "mvs_20260924_191659_195332.jpg",
+      "label": "mvs_20260924_191659_195332.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "b9b59cd4e0e80787864e1c58423e4ecd6b2efc343bea7a30da5021918284d43a",
+      "label_sha256": "1e4f2b28efe3b636d038efbe80c5910009069a0d78f5bec1c4fe49bc1fb8ec95"
+    },
+    {
+      "image": "mvs_20260924_191659_715244.jpg",
+      "label": "mvs_20260924_191659_715244.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "066d05c88fe38662c9a49499cf423fc92f1a68acb95aeb5e67299f56af81820b",
+      "label_sha256": "1a0ec48fc94d694d177b3062ae8b36f8e83ec6cd733acddeb239dba6a5afe8e8"
+    },
+    {
+      "image": "mvs_20260924_191702_255451.jpg",
+      "label": "mvs_20260924_191702_255451.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "29fd43e50a425fb5da8c8be6586ba0ba503a97e72c2d9ac9716a54b9ce50c5c7",
+      "label_sha256": "548861f302612660b70cf4c93093fb7e8343b4dd55d75a8c6ffd32eaa05ab9e6"
+    },
+    {
+      "image": "mvs_20260924_191702_755544.jpg",
+      "label": "mvs_20260924_191702_755544.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "b3082388cb33218c9faddfe7218b05a456994b4814cd7de27a4093554e7eb5ae",
+      "label_sha256": "a896c5de0bb564192688cecafa9ae5e50634febc1921ae10008e9229b8e714ea"
+    },
+    {
+      "image": "mvs_20260924_191704_295749.jpg",
+      "label": "mvs_20260924_191704_295749.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "b6f77e2e2d27bb5e480e55a871a2832d7765c2e16f0124ad75e8dfcc6d7e4719",
+      "label_sha256": "b89cc7e7435100f9536c483e4d572c710cb2bebc123df824080019626737fedb"
+    },
+    {
+      "image": "mvs_20260924_191705_315618.jpg",
+      "label": "mvs_20260924_191705_315618.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "0b090a0082e8b86f5842d53a5c2cc03a2bb9e11317abae6090059475b7db738d",
+      "label_sha256": "62f4f9c35651b662bdf04dceedb4253063bbd7a1a255b7d5ce94453f223cb187"
+    },
+    {
+      "image": "mvs_20260924_191705_835724.jpg",
+      "label": "mvs_20260924_191705_835724.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "a5ad2ea24395c80822b53ed6fec457ec7269a4d4cdd3bf5ac0406aad4fd53637",
+      "label_sha256": "1c37f88c99ef4f2561530b3172f10a7efbf264c65f2c77974c2a097798d582fe"
+    },
+    {
+      "image": "mvs_20260924_191706_338941.jpg",
+      "label": "mvs_20260924_191706_338941.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "45632d80bfcae5162ca222a24e8948f27e5a0cb2ad64bb004baf76bec4f0127d",
+      "label_sha256": "f029325320d2137323af6baa8cce16968cc20e84e1ba73f9d25a9673f610a25b"
+    },
+    {
+      "image": "mvs_20260924_191706_855636.jpg",
+      "label": "mvs_20260924_191706_855636.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "3a55c7d65c4032058aad57c5a8dbfda82f93522ec507cc50969fb278d1fb007c",
+      "label_sha256": "e52772fc516b9260e26bd8f4858d81bda588823221119b38944cf4dfd502413f"
+    },
+    {
+      "image": "mvs_20260924_191707_356439.jpg",
+      "label": "mvs_20260924_191707_356439.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "2f88a0a6b666fb6bad94114737f3b77a9a294aa8c66dd059c1e6c7313e84a9a9",
+      "label_sha256": "a4cc1130b43e0fc35261ccd87626fa243482b9d312673a494f451a8157a2242b"
+    },
+    {
+      "image": "mvs_20260924_191708_376769.jpg",
+      "label": "mvs_20260924_191708_376769.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "ec4912f3385a2c4af0adf104abd5bedbd443aa4a589dc346acb0cc20fa664126",
+      "label_sha256": "c9821cb9b18ae76b365e0dac5c2f9aa0b53417a84c507e8a9d26f74c7eba2f45"
+    },
+    {
+      "image": "mvs_20260924_191708_896169.jpg",
+      "label": "mvs_20260924_191708_896169.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "0d7fb5c37941a5a1e2a71a2a2e2a5648ee3789c6f374d0392e7f7fb6e098debb",
+      "label_sha256": "5bb012d3afbd23006a27e209ab16fa941df59e6d84b765a79e8572249b70990f"
+    },
+    {
+      "image": "mvs_20260924_191709_416794.jpg",
+      "label": "mvs_20260924_191709_416794.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "25774b5ad1529dc73258f205d7cb741537b4b3936e6b3559384e835990e9114d",
+      "label_sha256": "1c5ac2502f62167b7e243beb3456246a020558e3ce1debff6e1382f5e53eaed3"
+    },
+    {
+      "image": "mvs_20260924_191710_436068.jpg",
+      "label": "mvs_20260924_191710_436068.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "d12a3c05e68df29f5fd0eba122543e6a8ba9457117067b75b152caa3def47355",
+      "label_sha256": "241a3593ef22cac86a9a60b9c1ef9e2ae1b7bfcbc22ea969142eb0dd16c2b8df"
+    },
+    {
+      "image": "mvs_20260924_191710_936470.jpg",
+      "label": "mvs_20260924_191710_936470.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "0c73bbfcff64dace51b0fdd0da260d5cf32504fcffc0ce9be120b350f6e20e2f",
+      "label_sha256": "fd6ddf97149687189ba8b8e580ed7a7d07e2deeb83c03ff9f76d34ba46c37035"
+    },
+    {
+      "image": "mvs_20260924_191711_456635.jpg",
+      "label": "mvs_20260924_191711_456635.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "74d4452361f3e961524bf32b4e4e62826241ee432a2c6cb3454030f16f09dcba",
+      "label_sha256": "dd6a86cf42d0d7472cbee8cdec6b3dcd7e92221eceda83e3f3bb17fbec87be12"
+    },
+    {
+      "image": "mvs_20260924_191711_975775.jpg",
+      "label": "mvs_20260924_191711_975775.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "7d862f5dc23adbfae3157b75c70e41bbadda864ac0ef4759bf15c9f67cadaaff",
+      "label_sha256": "95336ebe71c2c2cc7c7da2b23a9aa9d08a0a5e6e029fc59c389a36d47776a882"
+    },
+    {
+      "image": "mvs_20260924_191712_477048.jpg",
+      "label": "mvs_20260924_191712_477048.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "4b47265c2d488ce7d01f297076545d3a2cdb15bfd46b239bdd3294b5b0a704da",
+      "label_sha256": "2381a84bda38de72659df37a6ba21dbbf2da5a201e2b04ac086ff1bd0ddb915b"
+    },
+    {
+      "image": "mvs_20260924_191712_996468.jpg",
+      "label": "mvs_20260924_191712_996468.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "63cc4d628999d58a1bc8c1e52cba3bc8447e9de8191bc33d979fc321515b6945",
+      "label_sha256": "7597ae52a7e85aea3a87ddbf25e4f8dee485df07388f06a044ad61249b5c3bb7"
+    },
+    {
+      "image": "mvs_20260924_191713_497082.jpg",
+      "label": "mvs_20260924_191713_497082.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "2e7cb75009738216c79e34ac02a702b1a1936d811223446c4d8012687d5a2337",
+      "label_sha256": "57cf0d79e01fcec7ef7eb01b8569a42bd621e36e06dd95e7c3d863510c4afd59"
+    },
+    {
+      "image": "mvs_20260924_191714_017671.jpg",
+      "label": "mvs_20260924_191714_017671.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "66be1327978794d1ed715072f1f59171591646d6a5218e88efe5dc152d498d54",
+      "label_sha256": "f1969af1fdc0aee9643f520b8c8c963ce8aaa08e5b5445b199209e490b06ace0"
+    },
+    {
+      "image": "mvs_20260924_191714_535811.jpg",
+      "label": "mvs_20260924_191714_535811.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "7d4dee7dcfd1b4c33ca4bfbc7cb0177b65276c7b813697df97e7ee5e53e53e97",
+      "label_sha256": "5b19b7bb45f4ec91a2c15b7c00d835db9995008a2143ab2225437886335d2f58"
+    },
+    {
+      "image": "mvs_20260924_191715_036472.jpg",
+      "label": "mvs_20260924_191715_036472.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "fc02736a2bf1373aa827113a9f81bdc1c5490f798581ab02ad7434d39c143085",
+      "label_sha256": "3315be02f703b3346f2464bbca93bc9a14cdfb74d28413be954c09a5c2e856e2"
+    },
+    {
+      "image": "mvs_20260924_191715_536644.jpg",
+      "label": "mvs_20260924_191715_536644.txt",
+      "split": "train",
+      "boxes": 4,
+      "image_sha256": "6474a1f0c5689cf0337af463a01132d9ee5ac02852d64bdb71878571c97e6874",
+      "label_sha256": "06b6b392eacd62c8c532d441a45486f3e000f1294d9a9ce53fb9805f98fdac0c"
+    },
+    {
+      "image": "mvs_20260924_191716_576416.jpg",
+      "label": "mvs_20260924_191716_576416.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "97ca0ab624f12828d5a82f12aaba132a9a901c2881f5d48f599ddca289e113aa",
+      "label_sha256": "b825b93e85771d86707154960d8fe250806d377efe4cb8a459244b3cf553b0dc"
+    },
+    {
+      "image": "mvs_20260924_191717_079017.jpg",
+      "label": "mvs_20260924_191717_079017.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "88284a7603513fffd8ae4068ddf4dc5f9dbb3ecc40ad2bc57ba0b6348845eb6b",
+      "label_sha256": "1855f1ed5c299a1515c8582a676b4c91d398ff38dd60aea558a47d98534d3746"
+    },
+    {
+      "image": "mvs_20260924_191717_596358.jpg",
+      "label": "mvs_20260924_191717_596358.txt",
+      "split": "train",
+      "boxes": 3,
+      "image_sha256": "5b680b548a2bd9bf810d86e612a5f7fb6dea94d89a1770b4eac9f23c2c5b7a64",
+      "label_sha256": "33fa55db1993085ee07c4cb1fe5ffba39acd851ae9028ca661c74c89f150c119"
+    },
+    {
+      "image": "mvs_20260924_191718_096457.jpg",
+      "label": "mvs_20260924_191718_096457.txt",
+      "split": "train",
+      "boxes": 2,
+      "image_sha256": "ac87495f71d65950663d8127b20a4184b9190da70f3086dfd8de3ec25f1cd336",
+      "label_sha256": "2ea5650f82cf5937810f24deb0625ed31baea854b00a368a60ee57648bb9d37e"
+    },
+    {
+      "image": "mvs_20260924_191718_597326.jpg",
+      "label": "mvs_20260924_191718_597326.txt",
+      "split": "train",
+      "boxes": 1,
+      "image_sha256": "fc870880523a9ce284a7e1b7fb3ff4d22f80ecc4bb0109fc9daeeca8c74ccb30",
+      "label_sha256": "8c2ef85305158138c66e806b4db02db98594482a76361e763375e5a07feacc1a"
+    },
+    {
+      "image": "mvs_20260924_191643_914376.jpg",
+      "label": "mvs_20260924_191643_914376.txt",
+      "split": "valid",
+      "boxes": 4,
+      "image_sha256": "a5c4d7b14520a06454aae235ce43d03e5e659214e88dcdd6999096f0bd0aaf78",
+      "label_sha256": "fa9bfd212323e9eed447033b9125cf693c65623e0b8dc9c53de52ce33906497e"
+    },
+    {
+      "image": "mvs_20260924_191644_414661.jpg",
+      "label": "mvs_20260924_191644_414661.txt",
+      "split": "valid",
+      "boxes": 4,
+      "image_sha256": "4e4263bfcdc043f55e9abc619fa4d0005386e28889c47a8966008aa8e6c7b582",
+      "label_sha256": "239484f5b40e753ec2224f69cec8b0c74c8810bda17e212bd86e8c642806c211"
+    },
+    {
+      "image": "mvs_20260924_191645_434623.jpg",
+      "label": "mvs_20260924_191645_434623.txt",
+      "split": "valid",
+      "boxes": 4,
+      "image_sha256": "bd6c5b58f940104bedb65dff5ba8e042c01499f368690edccc98494d7b1aa20d",
+      "label_sha256": "2b2e00bfb7845928fa00b59342726d80a15e019b0e56f38780467287cf6a7358"
+    },
+    {
+      "image": "mvs_20260924_191646_436399.jpg",
+      "label": "mvs_20260924_191646_436399.txt",
+      "split": "valid",
+      "boxes": 4,
+      "image_sha256": "66e2475b031648c83766a7c1a9051fb7ca7ae11c20a1a78fb4d0cc5a2fea0c55",
+      "label_sha256": "bc339a378ea7e905048f81a5051de8dcdf7763a8d37e0de1f2758f08384c08b1"
+    },
+    {
+      "image": "mvs_20260924_191646_954645.jpg",
+      "label": "mvs_20260924_191646_954645.txt",
+      "split": "valid",
+      "boxes": 3,
+      "image_sha256": "64759dc5b351e75b0cb133a06bf175deb890a2c73300f6e35a823610dbe4d87d",
+      "label_sha256": "6b0da9dbe4144ae17d67e0857d6a4ae3ebb033431ee4d255901fd596fa8490f3"
+    },
+    {
+      "image": "mvs_20260924_191647_974771.jpg",
+      "label": "mvs_20260924_191647_974771.txt",
+      "split": "valid",
+      "boxes": 3,
+      "image_sha256": "2780ac886842e49607ccf740d6cf6699fa7ce9d36d66235c79d00241e9771125",
+      "label_sha256": "0381a90a5e973b00762bc21fc0a95c1fb126b468e77aba49c852599d48c6f50c"
+    },
+    {
+      "image": "mvs_20260924_191651_055013.jpg",
+      "label": "mvs_20260924_191651_055013.txt",
+      "split": "valid",
+      "boxes": 3,
+      "image_sha256": "1b540559c3b3c912838ec8f3daee9139a711b97855bd21846351546d4ab9187c",
+      "label_sha256": "598c75ff2bd51eab984619a727a698ab725dfc88f2116572782c7b97d3f63f9d"
+    },
+    {
+      "image": "mvs_20260924_191651_575364.jpg",
+      "label": "mvs_20260924_191651_575364.txt",
+      "split": "valid",
+      "boxes": 3,
+      "image_sha256": "87d7b5e39ebc4523914439382dc5705c08fe9c17fcf5e3020b7cd6ed86745048",
+      "label_sha256": "400d02403271bc6fe4253b994efb8febe60627e1d34406f89725af47707b8a29"
+    },
+    {
+      "image": "mvs_20260924_191657_675287.jpg",
+      "label": "mvs_20260924_191657_675287.txt",
+      "split": "valid",
+      "boxes": 1,
+      "image_sha256": "48ecffed331b0612e8028bf812cda46170420c050fdeea0106538a4017c17565",
+      "label_sha256": "e1e7b409333c4c222ad5b100c0ad416dffa8747dd4983183a11903c35b591d0d"
+    },
+    {
+      "image": "mvs_20260924_191703_255868.jpg",
+      "label": "mvs_20260924_191703_255868.txt",
+      "split": "valid",
+      "boxes": 1,
+      "image_sha256": "74bf9402ecbd70d85fc6ea8d67d179eaeaa48f95fc83135e22f6ea1137d95daf",
+      "label_sha256": "077856c1bb8dd625c8d1af2f51f338b22e2625a9c6143fe9353ac6097bc97401"
+    },
+    {
+      "image": "mvs_20260924_191703_776063.jpg",
+      "label": "mvs_20260924_191703_776063.txt",
+      "split": "valid",
+      "boxes": 2,
+      "image_sha256": "b0c518bac250cc55f04cb0eb576d5ab1f86504d08e20872dc93c692a2323d75c",
+      "label_sha256": "d8b512f01426156e59b2813e53470a11f35189526ae27d82156186fa9ad61451"
+    },
+    {
+      "image": "mvs_20260924_191704_796745.jpg",
+      "label": "mvs_20260924_191704_796745.txt",
+      "split": "valid",
+      "boxes": 2,
+      "image_sha256": "7e952e39f11e7374ca69f5a847d425bf5abc22f323272990d87c7683aa1de0c4",
+      "label_sha256": "31ed46a194ea37c0c47c5fa8e1fc98770d27d6ef45a496147ea31c02e123a346"
+    },
+    {
+      "image": "mvs_20260924_191707_857207.jpg",
+      "label": "mvs_20260924_191707_857207.txt",
+      "split": "valid",
+      "boxes": 2,
+      "image_sha256": "34644ccf12e01b1ff7cbc9b936904b84310ea644a910a0e266a7985401604fe9",
+      "label_sha256": "afd836f53c7062c7104159111516e6202c67c27b8d98bcc7a9153a8545f156e5"
+    },
+    {
+      "image": "mvs_20260924_191709_935675.jpg",
+      "label": "mvs_20260924_191709_935675.txt",
+      "split": "valid",
+      "boxes": 1,
+      "image_sha256": "d64bf200bdc5d3765c14027428176245a8962e270770513bdb88a1bcd7a17340",
+      "label_sha256": "f08489f71ffa21f435c3789d0a06ad8401b1af5a983ba7520c6186601c1df768"
+    },
+    {
+      "image": "mvs_20260924_191716_056140.jpg",
+      "label": "mvs_20260924_191716_056140.txt",
+      "split": "valid",
+      "boxes": 4,
+      "image_sha256": "82563583ae19c867153f38f2811b831de16055e87ba23b8fe1b3dd3c8fc90172",
+      "label_sha256": "8848aaf3849deb6b71c0164e63f297d95a84a415f413a958535c043efb3a8bf2"
+    },
+    {
+      "image": "mvs_20260924_191719_116633.jpg",
+      "label": "mvs_20260924_191719_116633.txt",
+      "split": "valid",
+      "boxes": 2,
+      "image_sha256": "94dded41fc1e974dcaa7787b96432ba34c0b627bfd9cb05397b8089c9e40f7f5",
+      "label_sha256": "84083698abe59db41be4bd33e619c95da5fc7fd4b5b36c8fef9063ce088a7666"
+    }
+  ],
+  "random_seed": 42
+}
