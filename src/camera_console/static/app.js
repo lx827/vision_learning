@@ -1,4 +1,4 @@
-// Shared controls for MVS, DroidCam Client, and OBS DroidCam.
+// Shared controls for MVS, DroidCam, OBS, and native Capture/UVC.
 const state = {
   config: null,
   devices: [],
@@ -11,6 +11,7 @@ const state = {
   previewSequence: -1,
   browserFrameTimes: [],
   scanPromise: null,
+  formatGeneration: 0,
   fpsWarningActive: false,
   lastError: "",
   drawing: false,
@@ -58,6 +59,10 @@ function isObsSource() {
   return $("source-type").value === "obs_droidcam";
 }
 
+function isUvcSource() {
+  return $("source-type").value === "capture_uvc";
+}
+
 function isFrameSource() {
   return !isObsSource();
 }
@@ -66,7 +71,9 @@ function updateSourceUi() {
   const mvs = isMvsSource();
   const client = isDroidCamClient();
   const obs = isObsSource();
+  const uvc = isUvcSource();
   document.body.classList.toggle("obs-mode", obs);
+  document.body.classList.toggle("uvc-mode", uvc);
   document.querySelectorAll(".mvs-only").forEach((element) => {
     element.hidden = !mvs;
   });
@@ -76,17 +83,41 @@ function updateSourceUi() {
   document.querySelectorAll(".frame-source-only").forEach((element) => {
     element.hidden = obs;
   });
+  document.querySelectorAll(".uvc-only").forEach((element) => {
+    element.hidden = !uvc;
+  });
+  $("region-selection-tools").hidden = uvc;
+  document.querySelector(".imaging-panel").hidden = obs;
+  elements.imagingFields.hidden = uvc;
+  ["photo-format", "jpeg-quality"].forEach((id) => { $(id).closest(".field").hidden = obs || uvc; });
+  ["recording-fps", "recording-duplicated", "recording-dropped"].forEach((id) => {
+    const value = $(id).parentElement;
+    value.hidden = obs || uvc;
+    value.previousElementSibling.hidden = obs || uvc;
+  });
+  $("output-size-title").textContent = uvc ? "预览最大尺寸" : "统一输出尺寸";
+  $("save-output-size-button").textContent = uvc ? "应用预览尺寸" : "应用输出尺寸";
+  $("metric-lost").parentElement.hidden = obs || uvc;
+  $("output-size-help").textContent = uvc
+    ? "仅缩小网页预览；照片和录像保留采集格式的原始尺寸。MJPEG 不缩小时直接预览。"
+    : "统一控制预览、照片和录像，保持比例缩小；不会放大原图，也不改变相机 ROI 和取景范围。";
+  $("video-format").querySelector('[value="mp4"]').textContent = uvc ? "H.264 / MP4" : "MP4";
+  $("video-format").querySelector('[value="avi"]').textContent = uvc ? "MJPEG 直通 / AVI" : "AVI";
   $("camera-roi-option").disabled = !mvs;
   if (!mvs && $("draw-mode").value === "camera") {
     $("draw-mode").value = "processing";
   }
   $("connection-help").textContent = mvs
     ? "IP 只用于选择已枚举的 MVS 相机，不会修改相机网络配置。"
+    : uvc
+      ? "请先停止 capture.exe 中的采集，再连接网页。先选择设备和格式；光照不足时相机可能自动降低帧率。"
     : client
       ? "通过 DroidCam Client 的 Windows 虚拟摄像头读取画面。"
       : "通过本机 OBS WebSocket 控制 DroidCam 输入；连接时自动准备仅含手机画面的专用场景。";
   $("output-help").textContent = obs
     ? "OBS 截图固定保存为 PNG；录像格式和尺寸沿用 OBS 设置，录像目录在每次开始时应用。"
+    : uvc
+      ? "照片固定为原始尺寸 JPG，拍照会等待曝光稳定。AVI 为 MJPEG 直通；MP4 使用内核 H.264 编码及硬件编码回退。格式或尺寸切换前须断开相机。"
     : "输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。";
   $("empty-state").textContent = obs
     ? "连接 OBS 后在这里显示实时取景预览"
@@ -174,6 +205,10 @@ function fillConfig(config) {
   $("standard-height").value = standard.requested_height ?? 720;
   $("standard-fps").value = standard.requested_fps ?? 30;
   const obs = config.obs_droidcam || {};
+  const uvc = config.capture_uvc || {};
+  $("uvc-library-path").value = uvc.library_path || "../capture/build/bin/capturecore.dll";
+  elements.deviceSelect.dataset.uvcDevice = uvc.device_id || "";
+  $("uvc-format").value = String(uvc.format_index ?? -1);
   $("device-select").dataset.obsSource = obs.source_name || "";
   $("photo-dir").value = config.capture.photo_dir;
   $("video-dir").value = config.capture.video_dir;
@@ -211,6 +246,14 @@ function collectConfig() {
         ? (state.devices[Number(elements.deviceSelect.value)]?.model || elements.deviceSelect.dataset.obsSource || "")
         : (state.config?.obs_droidcam?.source_name || ""),
       photo_prefix: state.config?.obs_droidcam?.photo_prefix || "phone",
+    },
+    capture_uvc: {
+      ...(state.config?.capture_uvc || {}),
+      library_path: $("uvc-library-path").value.trim(),
+      device_id: isUvcSource()
+        ? (state.devices[Number(elements.deviceSelect.value)]?.device_id || elements.deviceSelect.dataset.uvcDevice || "")
+        : (state.config?.capture_uvc?.device_id || ""),
+      format_index: isUvcSource() ? numberValue("uvc-format") : (state.config?.capture_uvc?.format_index ?? -1),
     },
     capture: {
       ...(state.config?.capture || {}),
@@ -255,6 +298,7 @@ async function scanDevicesOnce() {
     elements.deviceSelect.add(new Option("未发现相机", ""));
     logEvent(isMvsSource()
       ? "未发现 MVS 相机，请检查供电、网线和网卡地址。"
+      : isUvcSource() ? "未发现 Capture/UVC 相机，请检查 USB 连接。"
       : isDroidCamClient()
         ? "未发现 DroidCam Client 摄像头，请确认客户端正在显示画面。"
         : "未发现 OBS DroidCam 来源，请确认 OBS、WebSocket 和 DroidCam 插件已启用。", true);
@@ -263,6 +307,7 @@ async function scanDevicesOnce() {
   state.devices.forEach((device, index) => {
     const detail = isMvsSource()
       ? (device.ip || device.serial)
+      : isUvcSource() ? device.user_name
       : isDroidCamClient()
         ? (device.user_name || `编号 ${device.index}`)
         : "OBS 输入源";
@@ -271,16 +316,17 @@ async function scanDevicesOnce() {
   const configured = state.devices.findIndex((device) => isMvsSource()
     ? ((state.config.camera.ip && device.ip === state.config.camera.ip)
       || (state.config.camera.serial && device.serial === state.config.camera.serial))
+    : isUvcSource() ? device.device_id === (state.config.capture_uvc?.device_id || elements.deviceSelect.dataset.uvcDevice)
     : isDroidCamClient()
       ? device.index === numberValue("standard-camera-index")
       : device.model === (state.config.obs_droidcam?.source_name || elements.deviceSelect.dataset.obsSource));
   elements.deviceSelect.value = String(configured >= 0 ? configured : 0);
-  selectDevice();
-  const sourceLabel = isMvsSource() ? "台 MVS 相机" : isDroidCamClient() ? "个 DroidCam Client 摄像头" : "个 OBS DroidCam 来源";
+  await selectDevice();
+  const sourceLabel = isMvsSource() ? "台 MVS 相机" : isUvcSource() ? "台 Capture/UVC 相机" : isDroidCamClient() ? "个 DroidCam Client 摄像头" : "个 OBS DroidCam 来源";
   logEvent(`发现 ${state.devices.length} ${sourceLabel}。`);
 }
 
-function selectDevice() {
+async function selectDevice() {
   const device = state.devices[Number(elements.deviceSelect.value)];
   if (!device) return;
   if (isMvsSource()) {
@@ -288,8 +334,35 @@ function selectDevice() {
     $("camera-serial").value = device.serial;
   } else if (isDroidCamClient()) {
     $("standard-camera-index").value = device.index;
+  } else if (isUvcSource()) {
+    elements.deviceSelect.dataset.uvcDevice = device.device_id;
+    await loadUvcFormats(device.device_id);
   } else {
     elements.deviceSelect.dataset.obsSource = device.model;
+  }
+}
+
+async function loadUvcFormats(deviceId) {
+  const generation = ++state.formatGeneration;
+  const select = $("uvc-format");
+  select.disabled = true;
+  $("uvc-format-help").textContent = "正在读取设备格式…";
+  try {
+    const payload = await api(`/api/capture-uvc/formats?device_id=${encodeURIComponent(deviceId)}`);
+    if (generation !== state.formatGeneration || !isUvcSource()) return;
+    select.replaceChildren(new Option("自动选择（优先 MJPEG）", "-1"));
+    payload.formats.forEach((format) => select.add(new Option(
+      `${format.name} · ${format.width} × ${format.height} · ${format.fps} FPS`, String(format.index),
+    )));
+    const configured = state.config?.capture_uvc;
+    select.value = configured?.device_id === deviceId ? String(configured.format_index) : "-1";
+    if (!select.value) select.value = "-1";
+    $("uvc-format-help").textContent = `已读取 ${payload.formats.length} 种格式；标称帧率以实际采集为准。`;
+  } catch (error) {
+    if (generation === state.formatGeneration) $("uvc-format-help").textContent = error.message;
+    throw error;
+  } finally {
+    if (generation === state.formatGeneration) select.disabled = Boolean(state.status.connected);
   }
 }
 
@@ -299,6 +372,7 @@ async function connectOrDisconnect() {
     updateStatus(payload.status);
     logEvent(isMvsSource()
       ? "MVS 相机已断开，SDK 资源已释放。"
+      : isUvcSource() ? "Capture/UVC 已断开，原生会话已释放。"
       : isDroidCamClient()
         ? "DroidCam Client 已断开，OpenCV 读取句柄已释放。"
         : "OBS DroidCam 控制已断开。");
@@ -308,6 +382,7 @@ async function connectOrDisconnect() {
   const payload = await api("/api/camera/connect", { method: "POST" });
   updateStatus(payload.status);
   startPreview();
+  if (isFrameSource()) api("/api/count/prepare", { method: "POST" }).catch(() => {});
   if (isFrameSource()) await loadParameters();
   const deviceDetail = payload.status.device.ip || payload.status.device.user_name || payload.status.device.serial;
   logEvent(`已连接 ${payload.status.device.model}（${deviceDetail}）。`);
@@ -412,10 +487,19 @@ function updateStatus(status) {
   elements.autoButton.disabled = !connected;
   elements.recordButton.disabled = !connected;
   elements.imagingFields.disabled = !connected || !mvs;
+  $("uvc-imaging-fields").disabled = !connected || !isUvcSource();
+  if (isUvcSource() && !connected) {
+    $("uvc-properties").replaceChildren();
+    $("uvc-imaging-help").textContent = "连接后读取设备实际支持的成像参数。";
+  }
+  updateExposureFpsGuidance();
   elements.roiFields.disabled = !connected || !mvs;
   elements.drawRegionButton.disabled = !connected || !isFrameSource();
   elements.restoreFullRoiButton.disabled = !connected || !mvs;
   $("source-type").disabled = connected;
+  $("uvc-library-path").disabled = connected && isUvcSource();
+  $("uvc-format").disabled = connected && isUvcSource();
+  elements.deviceSelect.disabled = connected && isUvcSource();
   elements.autoButton.textContent = status.auto_capture ? "停止自动拍照" : "开始自动拍照";
   elements.recordButton.querySelector("span").textContent = status.recording ? "停止录像" : "开始录像";
   elements.recordButton.classList.toggle("active", Boolean(status.recording));
@@ -427,7 +511,9 @@ function updateStatus(status) {
   $("metric-preview-resolution").textContent = status.preview_width ? `${status.preview_width} × ${status.preview_height}` : "—";
   $("metric-capture-fps").textContent = Number(status.capture_fps ?? status.fps ?? 0).toFixed(1);
   $("metric-preview-fps").textContent = Number(status.preview_fps || 0).toFixed(1);
-  $("metric-lost").textContent = status.lost_packets || 0;
+  $("metric-lost").textContent = isUvcSource() ? "—" : (status.lost_packets || 0);
+  $("uvc-written-frames").textContent = status.recording_result?.frames_written ?? "—";
+  $("uvc-encoder").textContent = status.recording_result?.encoder || "停止录像后显示";
   $("last-photo").textContent = status.last_photo || "—";
   $("last-photo").title = status.last_photo || "";
   $("recording-path").textContent = status.recording_path || "—";
@@ -720,10 +806,89 @@ function applyIntegerFeature(id, feature, rangeId) {
   $(rangeId).textContent = `${feature.minimum} — ${feature.maximum}，步长 ${feature.increment}`;
 }
 
+function calculateExposureFpsTiming(exposureUs, targetFps) {
+  if (!Number.isFinite(exposureUs) || !Number.isFinite(targetFps) || exposureUs <= 0 || targetFps <= 0) {
+    return null;
+  }
+  const framePeriodUs = 1_000_000 / targetFps;
+  const recommendedExposureUs = framePeriodUs * 0.9;
+  const theoreticalMaxFps = 1_000_000 / exposureUs;
+  const recommendedMaxFps = theoreticalMaxFps * 0.9;
+  const ratio = exposureUs / framePeriodUs;
+  const level = ratio >= 0.999999 ? "danger" : (ratio >= 0.899999 ? "warning" : (ratio <= 0.25 ? "info" : "ok"));
+  return {
+    level,
+    framePeriodUs,
+    recommendedExposureUs,
+    theoreticalMaxFps,
+    recommendedMaxFps,
+    ratio,
+  };
+}
+
+function setTimingAdvice(id, level, message) {
+  const advice = $(id);
+  advice.className = `timing-advice${level ? ` ${level}` : ""}`;
+  advice.textContent = message;
+}
+
+function updateExposureFpsGuidance() {
+  const capabilities = state.parameters?.capabilities || {};
+  if (elements.imagingFields.disabled || !state.parameters || !capabilities.exposure_us || !capabilities.frame_rate) {
+    setTimingAdvice("exposure-timing-advice", "", "连接支持成像参数的 MVS 相机后显示时序余量。");
+    setTimingAdvice("fps-timing-advice", "", "连接支持成像参数的 MVS 相机后显示建议上限。");
+    return;
+  }
+  const exposureIsAutomatic = capabilities.exposure_mode && $("exposure-mode").value !== "off";
+  const fpsLimitIsOff = capabilities.frame_rate_enabled && !$("fps-enabled").checked;
+
+  if (exposureIsAutomatic) {
+    setTimingAdvice("exposure-timing-advice", "warning", "自动曝光会改变曝光时长；光线不足时，实际帧率可能随曝光增加而下降。");
+    setTimingAdvice("fps-timing-advice", "warning", "需要稳定帧率时建议使用手动曝光，并让曝光短于目标帧周期。当前自动曝光无法保证目标 FPS。");
+    return;
+  }
+  if (fpsLimitIsOff) {
+    setTimingAdvice("exposure-timing-advice", "info", "帧率限制未启用；曝光越长，相机可输出的最高帧率越低。");
+    setTimingAdvice("fps-timing-advice", "info", "启用帧率限制后，这里会根据曝光时间显示可达到的建议上限。");
+    return;
+  }
+
+  const exposureUs = Number($("exposure-value").value);
+  const targetFps = Number($("fps-value").value);
+  const timing = calculateExposureFpsTiming(exposureUs, targetFps);
+  if (!timing) {
+    setTimingAdvice("exposure-timing-advice", "danger", "曝光时间和目标帧率都必须是大于 0 的数字。");
+    setTimingAdvice("fps-timing-advice", "danger", "曝光时间和目标帧率都必须是大于 0 的数字。");
+    return;
+  }
+
+  const exposureMs = exposureUs / 1000;
+  const periodMs = timing.framePeriodUs / 1000;
+  const recommendedExposureMs = timing.recommendedExposureUs / 1000;
+  if (timing.level === "danger") {
+    setTimingAdvice("exposure-timing-advice", "danger", `目标 ${targetFps.toFixed(1)} FPS 每帧只有 ${periodMs.toFixed(1)} ms；当前曝光 ${exposureMs.toFixed(1)} ms 已达到或超过帧周期，无法达到目标。`);
+  } else if (timing.level === "warning") {
+    setTimingAdvice("exposure-timing-advice", "warning", `目标 ${targetFps.toFixed(1)} FPS 的帧周期是 ${periodMs.toFixed(1)} ms；建议曝光不超过 ${recommendedExposureMs.toFixed(1)} ms，为读出和传输留出余量。`);
+  } else if (timing.level === "info") {
+    setTimingAdvice("exposure-timing-advice", "info", `当前曝光仅占帧周期的 ${(timing.ratio * 100).toFixed(0)}%，不会限制目标帧率；若画面偏暗，可在建议上限 ${recommendedExposureMs.toFixed(1)} ms 内增加曝光。`);
+  } else {
+    setTimingAdvice("exposure-timing-advice", "ok", `时序余量正常：${targetFps.toFixed(1)} FPS 建议曝光不超过 ${recommendedExposureMs.toFixed(1)} ms。`);
+  }
+  setTimingAdvice(
+    "fps-timing-advice",
+    timing.level,
+    `按当前 ${exposureMs.toFixed(1)} ms 曝光，理论上限 ${timing.theoreticalMaxFps.toFixed(1)} FPS；预留 10% 读出余量后建议目标不超过 ${timing.recommendedMaxFps.toFixed(1)} FPS。`,
+  );
+}
+
 async function loadParameters() {
   const payload = await api("/api/camera/parameters");
   const p = payload.parameters;
   state.parameters = p;
+  if (isUvcSource()) {
+    renderUvcParameters(p);
+    return;
+  }
   applyFeature("exposure-value", p.exposure_us, "exposure-range");
   applyFeature("gain-value", p.gain_db, "gain-range");
   applyFeature("fps-value", p.frame_rate, "fps-range");
@@ -751,6 +916,90 @@ async function loadParameters() {
       ? "拖框后会按相机步长对齐，应用后框外不再采集。"
       : "只保存算法区域坐标，完整画面保留；当前尚未接入处理算法。";
   }
+}
+
+const uvcPropertyLabels = {
+  1: "亮度", 2: "对比度", 3: "饱和度", 4: "色调", 5: "锐度", 6: "增益",
+  7: "伽马", 8: "自动白平衡", 9: "白平衡色温", 10: "工频抗闪烁",
+  11: "曝光模式", 12: "曝光时间", 13: "允许自动曝光降低帧率",
+  14: "自动对焦", 15: "对焦位置", 16: "变焦", 17: "水平转动",
+  18: "垂直转动", 19: "旋转",
+};
+
+function renderUvcParameters(parameters) {
+  const properties = parameters.uvc_properties || [];
+  const container = $("uvc-properties");
+  container.replaceChildren();
+  const exposureAvailable = properties.some((property) => [11, 12].includes(property.id));
+  $("uvc-imaging-help").textContent = properties.length
+    ? `已读取 ${properties.length} 项成像参数。${exposureAvailable ? "" : "当前设备的 Windows 驱动未暴露曝光控制，网页无法调节曝光。"}`
+    : "当前设备或驱动未提供可用的成像参数。";
+  properties.forEach((property) => {
+    const field = document.createElement("div");
+    field.className = "field";
+    const label = document.createElement("label");
+    const unit = { 1: "%", 2: "K", 3: "μs", 4: "Hz" }[property.unit] || "";
+    const title = uvcPropertyLabels[property.id] || property.name;
+    label.textContent = `${title}${unit ? `（${unit}）` : ""}`;
+    const control = document.createElement(property.type === 0 ? "input" : "select");
+    control.id = `uvc-property-${property.id}`;
+    label.htmlFor = control.id;
+    if (property.type === 0) {
+      control.type = "number";
+      control.min = property.minimum;
+      control.max = property.maximum;
+      control.step = property.step > 0 ? property.step : 1;
+    } else {
+      const exposureNames = { 0: "手动", 1: "全自动", 2: "快门优先", 3: "光圈优先" };
+      const options = property.type === 1
+        ? [{ value: 0, name: "关闭" }, { value: 1, name: "开启" }]
+        : property.options.map((option) => ({
+          value: option.value,
+          name: property.id === 11 ? (exposureNames[option.value] || option.name) : option.name,
+        }));
+      options.forEach((option) => control.add(new Option(option.name, String(option.value))));
+      if (!options.some((option) => option.value === property.value)) {
+        const unknown = new Option(`当前值：${property.value}（未列出的选项）`, String(property.value));
+        unknown.disabled = true;
+        control.add(unknown);
+      }
+    }
+    control.value = property.value;
+    const locked = Boolean((property.flags & 3) || property.is_auto);
+    control.disabled = locked;
+    const help = document.createElement("small");
+    help.id = `${control.id}-help`;
+    help.textContent = `设备当前值：${property.value}${unit ? ` ${unit}` : ""}。`
+      + (property.type === 0 ? `范围 ${property.minimum}–${property.maximum}；${property.step > 0 ? `步长 ${property.step}` : "由驱动按档位换算"}。` : "")
+      + (property.flags & 2 ? "设备暂时禁用。" : property.is_auto ? "自动模式控制中。" : property.flags & 1 ? "当前只读。" : "");
+    control.setAttribute("aria-describedby", help.id);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button";
+    button.textContent = "应用";
+    button.setAttribute("aria-label", `应用${title}`);
+    button.disabled = locked;
+    button.addEventListener("click", () => withBusy(button, async () => {
+      if (!control.value || !control.reportValidity()) throw new Error("请输入设备允许的参数值");
+      const value = Number(control.value);
+      if (!Number.isSafeInteger(value)) throw new Error("成像参数必须为有效整数");
+      try {
+        const payload = await api("/api/camera/parameters", {
+          method: "PUT", body: JSON.stringify({ property_id: property.id, value }),
+        });
+        state.parameters = payload.parameters;
+        renderUvcParameters(payload.parameters);
+        showToast(`${title}已应用，已回读设备实际值`);
+        logEvent(`${title}已写入相机。`);
+      } catch (error) {
+        // 写入或回读失败也刷新，避免继续展示已经过期的模式锁定状态。
+        await loadParameters().catch(() => {});
+        throw error;
+      }
+    }).catch(() => {}));
+    field.append(label, control, help, button);
+    container.append(field);
+  });
 }
 
 function sensorDimensions() {
@@ -786,6 +1035,7 @@ function syncParameterControls() {
   $("exposure-value").disabled = !connected || !capabilities.exposure_us || (capabilities.exposure_mode && $("exposure-mode").value !== "off");
   $("gain-value").disabled = !connected || !capabilities.gain_db || (capabilities.gain_mode && $("gain-mode").value !== "off");
   $("fps-value").disabled = !connected || !capabilities.frame_rate || (capabilities.frame_rate_enabled && !$("fps-enabled").checked);
+  updateExposureFpsGuidance();
 }
 
 function syncRoiControls() {
@@ -807,6 +1057,7 @@ async function applyParameters() {
   if (capabilities.white_balance_mode) values.white_balance_mode = $("white-balance-mode").value;
   const payload = await api("/api/camera/parameters", { method: "PUT", body: JSON.stringify(values) });
   state.parameters = payload.parameters;
+  updateExposureFpsGuidance();
   showToast("成像参数已应用");
   logEvent("曝光、增益、帧率和白平衡设置已写入相机。");
   return payload.parameters;
@@ -932,8 +1183,11 @@ async function pollStatus() {
 }
 
 function bindEvents() {
-  elements.deviceSelect.addEventListener("change", selectDevice);
+  elements.deviceSelect.addEventListener("change", () => {
+    selectDevice().catch((error) => { showToast(error.message, true); logEvent(error.message, true); });
+  });
   $("source-type").addEventListener("change", () => {
+    state.formatGeneration += 1;
     updateSourceUi();
     updateStatus(state.status);
     state.devices = [];
@@ -943,7 +1197,7 @@ function bindEvents() {
   $("scan-button").addEventListener("click", (event) => withBusy(event.currentTarget, scanDevices).catch(() => {}));
   $("save-config-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig()).catch(() => {}));
   $("save-output-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig("输出设置已保存")).catch(() => {}));
-  $("save-output-size-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig("输出尺寸已应用")).catch(() => {}));
+  $("save-output-size-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig(isUvcSource() ? "预览尺寸已应用" : "输出尺寸已应用")).catch(() => {}));
   elements.connectButton.addEventListener("click", (event) => withBusy(event.currentTarget, connectOrDisconnect).catch(() => {}));
   elements.snapshotButton.addEventListener("click", (event) => withBusy(event.currentTarget, takeSnapshot).catch(() => {}));
   elements.autoButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleAutoCapture).catch(() => {}));
@@ -952,6 +1206,7 @@ function bindEvents() {
     $("event-log").replaceChildren();
   });
   $("apply-parameters-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyParameters).catch(() => {}));
+  $("refresh-uvc-parameters-button").addEventListener("click", (event) => withBusy(event.currentTarget, loadParameters).catch(() => {}));
   $("apply-roi-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyRoi).catch(() => {}));
   elements.drawRegionButton.addEventListener("click", toggleDrawing);
   elements.applyRegionButton.addEventListener("click", (event) => withBusy(event.currentTarget, applyDrawnRegion).then(() => {
@@ -978,11 +1233,14 @@ function bindEvents() {
   $("exposure-mode").addEventListener("change", syncParameterControls);
   $("gain-mode").addEventListener("change", syncParameterControls);
   $("fps-enabled").addEventListener("change", syncParameterControls);
+  $("exposure-value").addEventListener("input", updateExposureFpsGuidance);
+  $("fps-value").addEventListener("input", updateExposureFpsGuidance);
   $("roi-centered").addEventListener("change", syncRoiControls);
   elements.preview.addEventListener("error", () => {
     if (state.status.connected) logEvent("实时预览中断，正在等待重新连接。", true);
   });
   elements.preview.addEventListener("load", renderRegions);
+  elements.viewport.addEventListener("previewresize", renderRegions);
   window.addEventListener("resize", renderRegions);
   window.addEventListener("pagehide", () => {
     if (!state.status.connected) return;
@@ -1001,6 +1259,7 @@ async function initialize() {
     updateStatus(statusPayload.status);
     if (statusPayload.status.connected) {
       startPreview();
+      if (isFrameSource()) api("/api/count/prepare", { method: "POST" }).catch(() => {});
       if (isFrameSource()) await loadParameters();
     }
     await withBusy($("scan-button"), scanDevices);

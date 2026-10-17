@@ -3,26 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>相机采集控制台</title>
+  <title>相机设置</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
   <div class="app">
-    <header class="header">
-      <div>
-        <h1>相机调试</h1>
-        <p>相机连接、画面预览与采集参数设置</p>
-      </div>
-      <div class="connection-status" id="connection-pill">
-        <span class="status-dot"></span>
-        <span id="connection-text">未连接</span>
-      </div>
-    </header>
-
-    <main id="main-content">
+    <main id="main-content" class="workspace-layout">
+      <div class="camera-workspace">
       <section class="panel connection-panel">
         <div class="panel-title">
           <h2>相机连接</h2>
+          <div class="connection-status" id="connection-pill">
+            <span class="status-dot"></span><span id="connection-text">未连接</span>
+          </div>
           <button class="button" id="scan-button" type="button">刷新设备</button>
         </div>
         <div class="form-grid connection-grid">
@@ -32,6 +25,7 @@
               <option value="mvs">MVS 工业相机</option>
               <option value="droidcam_client">DroidCam 客户端</option>
               <option value="obs_droidcam">OBS DroidCam</option>
+              <option value="capture_uvc">Capture/UVC 相机</option>
             </select>
           </div>
           <div class="field device-field">
@@ -57,6 +51,16 @@
           <div class="field client-only" hidden>
             <label for="standard-camera-index">摄像头编号</label>
             <input id="standard-camera-index" type="number" min="0" step="1">
+          </div>
+          <div class="field full uvc-only" hidden>
+            <label for="uvc-library-path">Capture 内核路径</label>
+            <input id="uvc-library-path" autocomplete="off" placeholder="../capture/build/bin/capturecore.dll">
+            <small>修改路径后先保存配置，再刷新设备。</small>
+          </div>
+          <div class="field full uvc-only" hidden>
+            <label for="uvc-format">采集格式</label>
+            <select id="uvc-format"><option value="-1">自动选择（优先 MJPEG）</option></select>
+            <small id="uvc-format-help" aria-live="polite">选择设备后读取支持的分辨率与帧率。</small>
           </div>
           <div class="field client-only" hidden>
             <label for="standard-width">请求宽度</label>
@@ -95,8 +99,9 @@
           </div>
         </div>
         <div class="preview-workspace">
-          <div class="viewport" id="viewport">
-            <img id="preview-image" alt="相机实时画面">
+          <div class="preview-display">
+          <div class="viewport preview-surface" id="viewport" data-resizable-preview>
+            <img id="preview-image" alt="相机实时画面" draggable="false">
             <div class="selection-layer" id="selection-layer" aria-label="在实时画面上拖动框选区域">
               <div class="region-box camera-region" id="camera-region-box" hidden><span>相机 ROI</span></div>
               <div class="region-box processing-region" id="processing-region-box" hidden><span>处理区域</span></div>
@@ -104,9 +109,12 @@
             </div>
             <div class="empty-state" id="empty-state">连接相机后在这里显示实时画面</div>
             <div class="recording-badge" id="recording-badge"><span></span>录像中</div>
+            <div class="preview-resize-handle" role="slider" tabindex="0" aria-label="调整画面大小，保持比例" aria-valuemin="240" aria-valuemax="960" aria-valuenow="960"></div>
+          </div>
           </div>
 
           <aside class="region-tools frame-source-only" aria-label="区域框选工具">
+            <div id="region-selection-tools">
             <h3>区域框选</h3>
             <div class="field">
               <label for="draw-mode">框选用途</label>
@@ -144,13 +152,15 @@
               </fieldset>
             </details>
 
+            </div>
             <div class="output-size-tools frame-source-only">
-              <h4>统一输出尺寸</h4>
+              <p class="help">拖动画面右下角可调整显示大小，保持原始比例。</p>
+              <h4 id="output-size-title">统一输出尺寸</h4>
               <div class="form-grid two-columns compact-grid">
                 <div class="field"><label for="output-max-width">最大宽度</label><input id="output-max-width" type="number" min="2" step="1"></div>
                 <div class="field"><label for="output-max-height">最大高度</label><input id="output-max-height" type="number" min="2" step="1"></div>
               </div>
-              <p class="help">统一控制预览、照片和录像，保持比例缩小；不会放大原图，也不改变相机 ROI 和取景范围。</p>
+              <p class="help" id="output-size-help">统一控制预览、照片和录像，保持比例缩小；不会放大原图，也不改变相机 ROI 和取景范围。</p>
               <button class="button" id="save-output-size-button" type="button">应用输出尺寸</button>
             </div>
           </aside>
@@ -174,6 +184,8 @@
               <dt class="frame-source-only">录像帧率</dt><dd class="frame-source-only"><code id="recording-fps">—</code></dd>
               <dt class="frame-source-only">补帧数量</dt><dd class="frame-source-only"><code id="recording-duplicated">0</code></dd>
               <dt class="frame-source-only">丢弃帧</dt><dd class="frame-source-only"><code id="recording-dropped">0</code></dd>
+              <dt class="uvc-only" hidden>已写入帧</dt><dd class="uvc-only" hidden><code id="uvc-written-frames">—</code></dd>
+              <dt class="uvc-only" hidden>实际编码器</dt><dd class="uvc-only" hidden><code id="uvc-encoder">停止录像后显示</code></dd>
             </dl>
             <div class="activity-log">
               <div class="activity-log-header">
@@ -205,27 +217,36 @@
           <section class="panel imaging-panel frame-source-only">
             <h2>成像参数</h2>
             <p class="help client-only" id="standard-imaging-help" hidden>DroidCam 客户端模式只读取画面；镜头、曝光、对焦和白平衡请在 DroidCam 中设置。</p>
+            <fieldset id="uvc-imaging-fields" class="uvc-only" disabled hidden>
+              <p class="help" id="uvc-imaging-help" role="status" aria-live="polite">连接后读取设备实际支持的成像参数。</p>
+              <button class="button" id="refresh-uvc-parameters-button" type="button">刷新成像参数</button>
+              <div class="form-grid two-columns" id="uvc-properties"></div>
+              <p class="help">每项点击“应用”后即时生效，并回读设备实际值。自动模式下的从属项不可手动修改；切换模式后会刷新可写状态。参数不会保存到网页配置。</p>
+            </fieldset>
             <fieldset id="imaging-fields" disabled>
               <div class="form-grid two-columns">
                 <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
-                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small></div>
+                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small><small class="timing-advice" id="exposure-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示时序余量。</small></div>
                 <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
                 <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
                 <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">启用帧率限制</label></div>
-                <div class="field"><label for="fps-value">采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small></div>
+                <div class="field"><label for="fps-value">目标采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small><small class="timing-advice" id="fps-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示建议上限。</small></div>
                 <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
               </div>
-              <p class="help">启用并应用后，录像文件自动使用相机返回的同一帧率；设备或处理速度不足时会在页面明确提示。</p>
+              <p class="help">目标帧率是期望上限，不保证相机一定达到；曝光、传感器读出、传输和处理速度都会限制实际帧率。录像文件使用相机返回的同一目标帧率。</p>
               <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
             </fieldset>
           </section>
 
         </div>
       </div>
+      </div>
+
     </main>
   </div>
 
   <div class="toast" id="toast" role="alert" aria-live="assertive"></div>
+  <script src="{{ url_for('static', filename='preview.js') }}" defer></script>
   <script src="{{ url_for('static', filename='app.js') }}" defer></script>
 </body>
 </html>

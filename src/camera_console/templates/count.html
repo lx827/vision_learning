@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>扇贝个数实时检测</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='count.css') }}">
+</head>
+<body>
+  <div class="count-app">
+    <main class="count-layout">
+      <section class="monitor-panel">
+        <div class="monitor-toolbar">
+          <div><span class="live-dot" id="live-dot"></span><span id="monitor-state">未开始监测</span></div>
+          <span id="frame-meta">等待相机画面</span>
+        </div>
+        <div class="monitor-stage">
+          <div class="preview-surface" id="count-surface" data-resizable-preview>
+            <img id="count-frame" alt="扇贝肉传送带实时检测画面" draggable="false">
+            <div class="stage-empty" id="stage-empty">请先在相机设置连接相机，即可预览并框选 ROI</div>
+            <div id="roi-layer" aria-label="拖动框选检测 ROI">
+              <div id="roi-box" hidden><span>检测 ROI</span></div>
+            </div>
+            <div class="preview-resize-handle" role="slider" tabindex="0" aria-label="调整画面大小，保持比例" aria-valuemin="240" aria-valuemax="960" aria-valuenow="960"></div>
+          </div>
+        </div>
+      </section>
+      <aside class="control-column">
+        <section class="metric-strip">
+          <div class="metric-main"><strong id="count-value">0</strong><span>累计计数</span></div>
+          <div><strong id="detect-value">0</strong><span>当前目标</span></div>
+          <div><strong id="count-fps-value">0.0</strong><span>推理 FPS</span></div>
+        </section>
+        <section class="control-panel">
+          <div class="panel-heading"><h2>监测控制</h2><span class="status-chip" id="error-chip" hidden>异常</span></div>
+          <div class="actions">
+            <button class="btn primary" id="start-button" type="button">开始监测</button>
+            <button class="btn" id="stop-button" type="button" disabled>停止</button>
+            <button class="btn" id="reset-button" type="button">清零</button>
+          </div>
+          <p class="error-text" id="error-text" role="status" hidden></p>
+          <p class="field-help" id="model-state" role="status" aria-live="polite"></p>
+        </section>
+        <fieldset id="detection-settings" class="control-panel">
+          <div class="panel-heading"><h2>检测参数</h2></div>
+          <div class="field-grid">
+            <label>置信度 <input id="conf-input" type="number" min="0.01" max="0.99" step="0.01" value="0.10"></label>
+            <label>输入尺寸 <select id="imgsz-input"><option value="640">640</option><option value="960" selected>960</option><option value="1280">1280</option></select></label>
+            <label>ROI X <input id="roi-x" type="number" min="0" value="0"></label>
+            <label>ROI Y <input id="roi-y" type="number" min="0" value="0"></label>
+            <label>ROI 宽度 <input id="roi-width" type="number" min="1" value="1280"></label>
+            <label>ROI 高度 <input id="roi-height" type="number" min="1" value="720"></label>
+          </div>
+          <div class="roi-actions">
+            <button class="btn" id="draw-roi-button" type="button" disabled>框选 ROI</button>
+            <button class="btn" id="full-roi-button" type="button" disabled>使用全图</button>
+          </div>
+          <p class="field-help" id="roi-help">停止监测后可拖动框选或修改 ROI；下次开始时生效。坐标以相机原始画面为准。</p>
+          <p class="field-help">拖动画面右下角调整显示大小，始终保持原始比例。</p>
+        </fieldset>
+        <fieldset id="count-settings" class="control-panel">
+          <div class="panel-heading"><h2>计数规则</h2></div>
+          <label>计数方式
+            <select id="count-mode"><option value="line">过线计数</option><option value="roi">ROI 计数</option></select>
+          </label>
+          <div class="field-grid" id="line-rule-fields">
+            <label>运动方向 <select id="direction-input"><option value="negative_to_positive">负侧 → 正侧</option><option value="positive_to_negative">正侧 → 负侧</option></select></label>
+            <label>计数线 X <input id="line-x" type="number" min="0" value="640"></label>
+            <label>死区像素 <input id="deadband-input" type="number" min="0" value="4"></label>
+          </div>
+          <p class="field-help" id="count-rule-help">按指定方向穿过红线后计数，同一个跟踪 ID 只计一次。</p>
+        </fieldset>
+      </aside>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='preview.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='count.js') }}" defer></script>
+</body>
+</html>

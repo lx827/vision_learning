@@ -1,4 +1,4 @@
-"""启动 MVS、DroidCam Client 与 OBS DroidCam 共用的浏览器控制台。"""
+"""启动 MVS、DroidCam、OBS 与 Capture/UVC 共用的浏览器控制台。"""
 
 from __future__ import annotations
 

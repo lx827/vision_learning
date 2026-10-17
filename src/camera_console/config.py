@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from src.droidcam.config import DroidCamClientConfig, ObsDroidCamConfig
+from src.capture_uvc.config import CaptureUvcConfig
 
 
 @dataclass
@@ -85,15 +86,24 @@ class CameraConsoleConfig:
     camera: CameraConnectionConfig = field(default_factory=CameraConnectionConfig)
     droidcam_client: DroidCamClientConfig = field(default_factory=DroidCamClientConfig)
     obs_droidcam: ObsDroidCamConfig = field(default_factory=ObsDroidCamConfig)
+    capture_uvc: CaptureUvcConfig = field(default_factory=CaptureUvcConfig)
     capture: CaptureConfig = field(default_factory=CaptureConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
 
     def validate(self) -> None:
-        if self.source_type not in {"mvs", "droidcam_client", "obs_droidcam"}:
-            raise ValueError("相机来源仅支持 mvs、droidcam_client 或 obs_droidcam")
+        if self.source_type not in {
+            "mvs",
+            "droidcam_client",
+            "obs_droidcam",
+            "capture_uvc",
+        }:
+            raise ValueError(
+                "相机来源仅支持 mvs、droidcam_client、obs_droidcam 或 capture_uvc"
+            )
         self.camera.validate()
         self.droidcam_client.validate()
         self.obs_droidcam.validate()
+        self.capture_uvc.validate()
         self.capture.validate()
         self.server.validate()
 
@@ -128,6 +138,7 @@ class CameraConsoleConfig:
             camera=CameraConnectionConfig(**(data.get("camera") or {})),
             droidcam_client=DroidCamClientConfig(**droidcam_data),
             obs_droidcam=ObsDroidCamConfig(**(data.get("obs_droidcam") or {})),
+            capture_uvc=CaptureUvcConfig(**(data.get("capture_uvc") or {})),
             capture=CaptureConfig(**capture_data),
             server=ServerConfig(**(data.get("server") or {})),
         )

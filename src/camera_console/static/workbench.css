@@ -1,0 +1,17 @@
+:root { --ink:#24303a; --muted:#71808b; --line:#dfe5e9; --paper:#f5f6f7; --blue:#4d7ff0; --blue-soft:#eaf0ff; font-family:"Segoe UI","Microsoft YaHei UI",system-ui,sans-serif; }
+* { box-sizing:border-box; }
+html,body { min-width:320px; min-height:100%; margin:0; color:var(--ink); background:var(--paper); }
+button { font:inherit; cursor:pointer; }
+.console-shell { width:calc(100% - 48px); margin:0 auto; padding:24px 0 32px; }
+.console-header { padding-bottom:20px; }
+.brand-line { display:flex; align-items:center; gap:14px; }
+h1 { margin:0; font-size:25px; letter-spacing:0; }
+:focus-visible { outline:2px solid var(--blue); outline-offset:2px; }
+.module-nav { display:flex; align-items:center; gap:4px; min-height:52px; overflow-x:auto; border-bottom:2px solid #38424b; }
+.module-tab { flex:none; padding:10px 18px; color:#34404a; border:0; border-radius:5px 5px 0 0; background:transparent; font-size:14px; white-space:nowrap; }
+.module-tab:hover,.module-tab.selected { color:#2d5ecb; background:var(--blue-soft); }
+.page-stage { padding-top:20px; }
+.page-view { display:none; min-height:calc(100vh - 150px); overflow:hidden; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 2px 7px rgba(35,49,60,.05); }
+.page-view.visible { display:block; }
+.page-view iframe { display:block; width:100%; height:calc(100vh - 152px); min-height:720px; border:0; background:#fff; }
+@media (max-width:900px) { .console-shell { width:calc(100% - 24px); padding-top:16px; } h1 { font-size:22px; } .page-view iframe { min-height:780px; height:calc(100vh - 125px); } }

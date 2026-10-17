@@ -17,7 +17,7 @@ from src.mvs.sdk import FloatFeature, Frame, MvsError
 @dataclass(frozen=True)
 class StandardCameraDeviceInfo:
     index: int
-    transport: str = "MediaFoundation"
+    transport: str = "DirectShow"
     model: str = "Windows 普通摄像头"
     serial: str = ""
     user_name: str = ""
@@ -55,7 +55,9 @@ class StandardCamera:
 
     @staticmethod
     def _backend() -> int:
-        return cv2.CAP_MSMF if os.name == "nt" else cv2.CAP_ANY
+        # DirectShow is available on the Windows camera path used by this app;
+        # the Media Foundation backend cannot open this UVC device reliably.
+        return cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
 
     @classmethod
     def enumerate_devices(
