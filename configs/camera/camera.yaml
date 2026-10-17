@@ -1,14 +1,14 @@
-source_type: droidcam_client
+source_type: capture_uvc
 camera:
   ip: ''
   serial: DB2598292
   sdk_python_path: ''
   frame_timeout_ms: 1000
 droidcam_client:
-  device_index: 3
+  device_index: 1
   device_name: USB Camera
-  requested_width: 1280
-  requested_height: 720
+  requested_width: 1920
+  requested_height: 1080
   requested_fps: 30
 obs_droidcam:
   source_name: DroidCam OBS

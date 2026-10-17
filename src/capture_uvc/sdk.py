@@ -232,6 +232,12 @@ class CaptureCore:
         if code != 0:
             reason = _text(self.dll.cap_result_string(code))
             detail = _text(self.dll.cap_last_error())
+            # Media Foundation reports E_ACCESSDENIED for an already-open UVC
+            # device. The native API currently labels this open-path error as
+            # internal, so expose the actionable diagnosis to the web client.
+            if "backend code -2147024891" in detail or "backend code 0x80070005" in detail:
+                reason = "device busy or access denied"
+                detail = f"{detail}；请先关闭 capture.exe、相机应用、OBS/MVS 等占用相机的程序，并检查 Windows 相机权限"
             raise CaptureError(f"Capture：{reason}（{detail}）")
 
     def devices(self) -> list[dict]:
