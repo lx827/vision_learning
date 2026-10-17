@@ -32,6 +32,7 @@
               <option value="mvs">MVS 工业相机</option>
               <option value="droidcam_client">DroidCam 客户端</option>
               <option value="obs_droidcam">OBS DroidCam</option>
+              <option value="capture_uvc">Capture/UVC 相机</option>
             </select>
           </div>
           <div class="field device-field">
@@ -57,6 +58,16 @@
           <div class="field client-only" hidden>
             <label for="standard-camera-index">摄像头编号</label>
             <input id="standard-camera-index" type="number" min="0" step="1">
+          </div>
+          <div class="field full uvc-only" hidden>
+            <label for="uvc-library-path">Capture 内核路径</label>
+            <input id="uvc-library-path" autocomplete="off" placeholder="../capture/build/bin/capturecore.dll">
+            <small>修改路径后先保存配置，再刷新设备。</small>
+          </div>
+          <div class="field full uvc-only" hidden>
+            <label for="uvc-format">采集格式</label>
+            <select id="uvc-format"><option value="-1">自动选择（优先 MJPEG）</option></select>
+            <small id="uvc-format-help" aria-live="polite">选择设备后读取支持的分辨率与帧率。</small>
           </div>
           <div class="field client-only" hidden>
             <label for="standard-width">请求宽度</label>
@@ -107,6 +118,7 @@
           </div>
 
           <aside class="region-tools frame-source-only" aria-label="区域框选工具">
+            <div id="region-selection-tools">
             <h3>区域框选</h3>
             <div class="field">
               <label for="draw-mode">框选用途</label>
@@ -144,13 +156,14 @@
               </fieldset>
             </details>
 
+            </div>
             <div class="output-size-tools frame-source-only">
-              <h4>统一输出尺寸</h4>
+              <h4 id="output-size-title">统一输出尺寸</h4>
               <div class="form-grid two-columns compact-grid">
                 <div class="field"><label for="output-max-width">最大宽度</label><input id="output-max-width" type="number" min="2" step="1"></div>
                 <div class="field"><label for="output-max-height">最大高度</label><input id="output-max-height" type="number" min="2" step="1"></div>
               </div>
-              <p class="help">统一控制预览、照片和录像，保持比例缩小；不会放大原图，也不改变相机 ROI 和取景范围。</p>
+              <p class="help" id="output-size-help">统一控制预览、照片和录像，保持比例缩小；不会放大原图，也不改变相机 ROI 和取景范围。</p>
               <button class="button" id="save-output-size-button" type="button">应用输出尺寸</button>
             </div>
           </aside>
@@ -174,6 +187,8 @@
               <dt class="frame-source-only">录像帧率</dt><dd class="frame-source-only"><code id="recording-fps">—</code></dd>
               <dt class="frame-source-only">补帧数量</dt><dd class="frame-source-only"><code id="recording-duplicated">0</code></dd>
               <dt class="frame-source-only">丢弃帧</dt><dd class="frame-source-only"><code id="recording-dropped">0</code></dd>
+              <dt class="uvc-only" hidden>已写入帧</dt><dd class="uvc-only" hidden><code id="uvc-written-frames">—</code></dd>
+              <dt class="uvc-only" hidden>实际编码器</dt><dd class="uvc-only" hidden><code id="uvc-encoder">停止录像后显示</code></dd>
             </dl>
             <div class="activity-log">
               <div class="activity-log-header">

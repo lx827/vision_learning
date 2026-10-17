@@ -17,6 +17,7 @@
 - [仿真扇贝肉检测训练](guides/scallop_meat_training.md) — 本地 YOLOv8s 微调配置、数据范围与手动启动说明
 - [仿真扇贝肉检测训练 v1](guides/scallop_meat_v1_training.md) — 从上次 best.pt 继续微调、camera_v1 数据范围与手动启动说明
 - [扇贝肉批量预标注](guides/scallop_meat_autolabel.md) — 使用已训练 ONNX 模型在 X-AnyLabeling 中批量标注图片副本
+- [Capture/UVC 相机](guides/capture_uvc.md) — 通过 capturecore 原生内核接入网页，保留原始拍照与录像路径
 
 ## 相机采集 (droidcam)
 

@@ -47,7 +47,7 @@
 - **模型导出**: ONNX、TensorRT、OpenVINO 等格式
 - **配置驱动**: YAML 配置文件，支持多实验管理
 - **模块化设计**: 易于扩展和定制
-- **相机采集控制台**: 统一接入 MVS、DroidCam Client 与 OBS DroidCam
+- **相机采集控制台**: 统一接入 MVS、DroidCam Client、OBS DroidCam 与 Capture/UVC
 
 ---
 
@@ -102,7 +102,7 @@ python src/evaluator.py --config configs/val.yaml
 
 ## 相机调试台
 
-相机来源栏并列提供 **MVS 工业相机**、**DroidCam 客户端**和 **OBS DroidCam**。三种来源共用实时预览、手动拍照、连续自动拍照和录像按钮，OBS 不再占用页面顶部的独立操作区。MVS 模式另外支持曝光、增益、帧率、白平衡和硬件采集 ROI。OBS 安装、使用及验收状态见 [OBS DroidCam 临时采集说明](docs/droidcam/obs_integration.md)。
+相机来源栏并列提供 **MVS 工业相机**、**DroidCam 客户端**、**OBS DroidCam** 和 **Capture/UVC 相机**，共用实时预览、手动拍照、连续自动拍照和录像按钮。MVS 模式另外支持曝光、增益、帧率、白平衡和硬件采集 ROI。Capture/UVC 通过 `capturecore.dll` 直接采集、拍照和录像，照片与录像保留采集原始尺寸，网页缩放仅影响预览；支持 MJPEG/AVI 直通与 H.264/MP4。接入步骤见 [Capture/UVC 使用说明](docs/guides/capture_uvc.md)，OBS 安装、使用及验收状态见 [OBS DroidCam 临时采集说明](docs/droidcam/obs_integration.md)。
 
 ### 前置条件
 
@@ -132,9 +132,9 @@ python scripts/mvs_probe.py --snapshot
 python scripts/camera_web.py
 ```
 
-服务就绪后会自动打开浏览器并访问 `http://127.0.0.1:8765`。三种来源的连接参数和输出配置保存在 `configs/camera/camera.yaml`；页面中的 IP 只用于选择已经枚举出的 MVS 设备，不会修改相机自身的网络配置。如需只启动服务而不打开浏览器，可运行 `python scripts/camera_web.py --no-browser`。旧命令 `python scripts/mvs_web.py` 仍可作为兼容入口使用。
+服务就绪后会自动打开浏览器并访问 `http://127.0.0.1:8765`。各来源的连接参数和输出配置保存在 `configs/camera/camera.yaml`；页面中的 IP 只用于选择已经枚举出的 MVS 设备，不会修改相机自身的网络配置。如需只启动服务而不打开浏览器，可运行 `python scripts/camera_web.py --no-browser`。旧命令 `python scripts/mvs_web.py` 仍可作为兼容入口使用。
 
-相机取流、网页预览编码和录像编码分别在独立后台线程中执行。网页每次只请求最新预览帧，处理或显示跟不上时会跳过旧预览帧，不会在浏览器中排队播放过时画面。页面使用一组最大宽高统一控制预览、照片和录像；三类输出都等比例缩小，且不会放大较小的原图或裁剪取景范围。
+MVS 和 DroidCam Client 的取流、网页预览编码和录像编码分别在独立后台线程中执行。网页每次只请求最新预览帧，处理或显示跟不上时会跳过旧预览帧，不会在浏览器中排队播放过时画面。这两种来源使用一组最大宽高统一控制预览、照片和录像；三类输出都等比例缩小，且不会放大较小的原图或裁剪取景范围。Capture/UVC 的最大宽高仅限制预览，拍照和录像直接使用原生内核，保留原始采集尺寸。
 
 OBS DroidCam 预览通过选定输入源的 JPEG 截图提供，只用于取景，不参与最终拍照或录像。浏览器在上一帧显示完成后立即请求下一帧，不设置固定限速，也不会并发积压请求；实际刷新率取决于 OBS 截图、HTTP 传输和浏览器解码速度。页面显示的“预览耗时”不包含手机传到 OBS 之前的延迟。OBS 录像目录可在网页中逐次修改，开始录像时临时应用，停止后恢复 OBS 原目录。
 
@@ -167,7 +167,7 @@ vision_learning/
 │   ├── export.yaml            # 模型导出配置
 │   ├── data/                  # 数据集配置（本地使用，不提交）
 │   ├── camera/
-│   │   └── camera.yaml        # 三种相机来源的共享控制台配置
+│   │   └── camera.yaml        # 各相机来源的共享控制台配置
 │   └── yolo/
 │       └── xanylabeling/      # X-AnyLabeling 模型配置
 │
@@ -178,6 +178,7 @@ vision_learning/
 │   ├── evaluator.py           # 评估器
 │   ├── exporter.py            # 导出器
 │   ├── camera_console/        # 共享 Web 页面、采集调度与录像
+│   ├── capture_uvc/           # capturecore C ABI 与原生拍照、录像适配
 │   ├── droidcam/              # DroidCam Client 与 OBS DroidCam 适配
 │   └── mvs/                   # 海康 MVS SDK 适配
 │
@@ -247,11 +248,12 @@ vision_learning/
 
 ## 相机模块边界
 
-共享控制台、两类 DroidCam 适配与 MVS SDK 适配互为同级模块。新增来源时应在对应适配目录实现，再由控制台统一调度，不能放入另一种硬件适配目录。
+共享控制台、Capture/UVC、两类 DroidCam 适配与 MVS SDK 适配互为同级模块。新增来源时应在对应适配目录实现，再由控制台统一调度，不能放入另一种硬件适配目录。
 
 ```text
 src/
 ├── camera_console/            # 页面、共享配置、采集调度与录像
+├── capture_uvc/               # Capture/UVC 原生内核
 ├── droidcam/                  # DroidCam Client 和 OBS DroidCam
 └── mvs/                       # 海康 MVS SDK
 ```

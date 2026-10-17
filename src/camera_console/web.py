@@ -1,4 +1,4 @@
-"""三种相机来源共用的浏览器控制台。"""
+"""MVS、DroidCam 和 Capture/UVC 共用的浏览器控制台。"""
 
 from __future__ import annotations
 
@@ -20,6 +20,8 @@ from .config import CameraConfigStore, CameraConsoleConfig
 from src.mvs.sdk import MvsError
 from .service import FrameCameraService
 from src.droidcam.obs import ObsError, ObsService
+from src.capture_uvc.sdk import CaptureError
+from src.capture_uvc.service import CaptureUvcService
 
 
 class _QuietCameraRequestHandler(WSGIRequestHandler):
@@ -43,6 +45,7 @@ def create_app(
     *,
     service: FrameCameraService | None = None,
     obs_service: ObsService | None = None,
+    capture_service: CaptureUvcService | None = None,
 ) -> Flask:
     """创建可注入相机服务的 Web 应用。"""
     package_dir = Path(__file__).parent
@@ -56,6 +59,15 @@ def create_app(
     obs = obs_service or ObsService()
     app.config["OBS_SERVICE"] = obs
     operation_lock = threading.RLock()
+    native = capture_service or CaptureUvcService(lambda: camera_service.config)
+    app.config["CAPTURE_UVC_SERVICE"] = native
+
+    def active_camera():
+        return (
+            native
+            if camera_service.config.source_type == "capture_uvc"
+            else camera_service
+        )
 
     def uses_obs() -> bool:
         return camera_service.config.source_type == "obs_droidcam"
@@ -135,7 +147,13 @@ def create_app(
                 if not was_connected:
                     obs.disconnect()
             return _ok(devices=found)
+        if (source_type or camera_service.config.source_type) == "capture_uvc":
+            return _ok(devices=native.enumerate_devices())
         return _ok(devices=camera_service.enumerate_devices(source_type))
+
+    @app.get("/api/capture-uvc/formats")
+    def capture_uvc_formats():
+        return _ok(formats=native.formats(request.args.get("device_id", "")))
 
     @app.get("/api/config")
     def get_config():
@@ -143,19 +161,27 @@ def create_app(
 
     @app.put("/api/config")
     def save_config():
-        payload = _json_body()
-        next_config = CameraConsoleConfig.from_dict(payload)
-        current_config = camera_service.config
-        if obs.status()["connected"] and (
-            next_config.source_type != current_config.source_type
-            or next_config.obs_droidcam != current_config.obs_droidcam
-        ):
-            raise ObsError("OBS DroidCam 已连接；修改来源前请先断开")
-        return _ok(config=camera_service.update_config(payload))
+        with operation_lock:
+            payload = _json_body()
+            next_config = CameraConsoleConfig.from_dict(payload)
+            current_config = camera_service.config
+            if obs.status()["connected"] and (
+                next_config.source_type != current_config.source_type
+                or next_config.obs_droidcam != current_config.obs_droidcam
+            ):
+                raise ObsError("OBS DroidCam 已连接；修改来源前请先断开")
+            if native.status()["connected"] and (
+                next_config.source_type != current_config.source_type
+                or next_config.capture_uvc != current_config.capture_uvc
+            ):
+                raise CaptureError("Capture/UVC 已连接；修改来源、内核或格式前请先断开")
+            return _ok(config=camera_service.update_config(payload))
 
     @app.get("/api/camera/status")
     def camera_status():
-        return _ok(status=normalized_obs_status() if uses_obs() else camera_service.status())
+        return _ok(
+            status=normalized_obs_status() if uses_obs() else active_camera().status()
+        )
 
     @app.post("/api/camera/connect")
     def camera_connect():
@@ -177,42 +203,43 @@ def create_app(
                 return _ok(status=normalized_obs_status())
             if obs.status()["connected"]:
                 raise MvsError("请先断开 OBS DroidCam，再连接其他相机来源")
-            return _ok(status=camera_service.connect())
+            return _ok(status=active_camera().connect())
 
     @app.post("/api/camera/disconnect")
     def camera_disconnect():
-        if uses_obs():
-            obs.disconnect()
-            return _ok(status=normalized_obs_status())
-        return _ok(status=camera_service.disconnect())
+        with operation_lock:
+            if uses_obs():
+                obs.disconnect()
+                return _ok(status=normalized_obs_status())
+            return _ok(status=active_camera().disconnect())
 
     @app.get("/api/camera/parameters")
     def camera_parameters():
         if uses_obs():
             return _ok(parameters={"capabilities": {}, "controls_external": True})
-        return _ok(parameters=camera_service.get_parameters())
+        return _ok(parameters=active_camera().get_parameters())
 
     @app.put("/api/camera/parameters")
     def set_camera_parameters():
         if uses_obs():
             raise ObsError("OBS DroidCam 不提供工业相机成像参数")
-        return _ok(parameters=camera_service.apply_parameters(_json_body()))
+        return _ok(parameters=active_camera().apply_parameters(_json_body()))
 
     @app.put("/api/camera/roi")
     def set_camera_roi():
         if uses_obs():
             raise ObsError("OBS DroidCam 不提供 MVS 硬件 ROI")
-        return _ok(parameters=camera_service.apply_roi(_json_body()))
+        return _ok(parameters=active_camera().apply_roi(_json_body()))
 
     @app.put("/api/processing-region")
     def set_processing_region():
         if uses_obs():
             raise ObsError("OBS DroidCam 临时方案不提供处理区域")
-        return _ok(region=camera_service.set_processing_region(_json_body()))
+        return _ok(region=active_camera().set_processing_region(_json_body()))
 
     @app.delete("/api/processing-region")
     def clear_processing_region():
-        camera_service.clear_processing_region()
+        active_camera().clear_processing_region()
         return _ok(region=None)
 
     @app.post("/api/capture/snapshot")
@@ -223,7 +250,7 @@ def create_app(
                 config.capture.photo_dir, config.obs_droidcam.photo_prefix
             )
             return _ok(path=status["last_photo"])
-        return _ok(path=camera_service.save_snapshot())
+        return _ok(path=active_camera().save_snapshot())
 
     @app.post("/api/capture/auto/start")
     def auto_start():
@@ -238,7 +265,7 @@ def create_app(
             )
             return _ok(status=normalized_obs_status())
         return _ok(
-            status=camera_service.start_auto_capture(payload.get("interval_seconds"))
+            status=active_camera().start_auto_capture(payload.get("interval_seconds"))
         )
 
     @app.post("/api/capture/auto/stop")
@@ -246,7 +273,7 @@ def create_app(
         if uses_obs():
             obs.stop_auto()
             return _ok(status=normalized_obs_status())
-        return _ok(status=camera_service.stop_auto_capture())
+        return _ok(status=active_camera().stop_auto_capture())
 
     @app.post("/api/recording/start")
     def recording_start():
@@ -254,7 +281,7 @@ def create_app(
             status = obs.start_recording(camera_service.config.capture.video_dir)
             return _ok(path=status["recording_path"], status=normalized_obs_status())
         return _ok(
-            path=camera_service.start_recording(), status=camera_service.status()
+            path=active_camera().start_recording(), status=active_camera().status()
         )
 
     @app.post("/api/recording/stop")
@@ -262,18 +289,23 @@ def create_app(
         if uses_obs():
             status = obs.stop_recording()
             return _ok(path=status["recording_path"], status=normalized_obs_status())
-        return _ok(path=camera_service.stop_recording(), status=camera_service.status())
+        return _ok(
+            path=active_camera().stop_recording(), status=active_camera().status()
+        )
 
     @app.get("/api/camera/stream")
     def camera_stream():
         if uses_obs():
             return Response(status=204, headers={"Cache-Control": "no-store"})
+        selected_camera = active_camera()
+
         def generate():
             sequence = -1
             while True:
-                sequence, jpeg = camera_service.wait_for_jpeg(sequence)
+                sequence, jpeg = selected_camera.wait_for_jpeg(sequence)
                 if jpeg is None:
-                    if not camera_service.status()["connected"]:
+                    status = selected_camera.status()
+                    if not status["connected"] or status.get("last_error"):
                         return
                     continue
                 yield b"--frame\r\nContent-Type: image/jpeg\r\nCache-Control: no-cache\r\n\r\n" + jpeg + b"\r\n"
@@ -298,7 +330,7 @@ def create_app(
                 },
             )
         after = request.args.get("after", default=-1, type=int)
-        sequence, jpeg, captured_at_ms = camera_service.wait_for_preview(after)
+        sequence, jpeg, captured_at_ms = active_camera().wait_for_preview(after)
         if jpeg is None or sequence == after:
             return Response(status=204, headers={"Cache-Control": "no-store"})
         return Response(
@@ -313,6 +345,7 @@ def create_app(
 
     @app.errorhandler(MvsError)
     @app.errorhandler(ObsError)
+    @app.errorhandler(CaptureError)
     @app.errorhandler(ValueError)
     def expected_error(error: Exception):
         return jsonify({"ok": False, "error": str(error)}), 400
@@ -328,6 +361,8 @@ def create_app(
         atexit.register(camera_service.close)
     if obs_service is None:
         atexit.register(obs.close)
+    if capture_service is None:
+        atexit.register(native.close)
     return app
 
 

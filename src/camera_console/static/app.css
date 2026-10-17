@@ -45,6 +45,10 @@ main { display: flex; flex-direction: column; gap: 16px; }
 .obs-mode .preview-workspace { grid-template-columns: 1fr; }
 .obs-mode .section-grid { grid-template-columns: 1fr; }
 .obs-mode .section-grid > .column:last-child { display: none; }
+.uvc-mode .connection-grid { grid-template-columns: 1fr 2fr; }
+.uvc-mode .section-grid { grid-template-columns: 1fr; }
+.uvc-mode .section-grid > .column:last-child { display: none; }
+.uvc-mode .output-size-tools { margin-top: 0; padding-top: 0; border-top: 0; }
 .sdk-field { grid-column: span 2; }
 .two-columns { grid-template-columns: 1fr 1fr; }
 .field.full { grid-column: 1 / -1; }
@@ -146,7 +150,7 @@ fieldset { margin: 0; padding: 0; border: 0; }
 @media (max-width: 800px) {
   .app { width: min(100% - 24px, 1200px); padding-top: 12px; }
   .header { align-items: flex-start; }
-  .connection-grid, .obs-mode .connection-grid, .two-columns, .section-grid, .preview-workspace { grid-template-columns: 1fr; }
+  .connection-grid, .obs-mode .connection-grid, .uvc-mode .connection-grid, .two-columns, .section-grid, .preview-workspace { grid-template-columns: 1fr; }
   .sdk-field, .field.full { grid-column: auto; }
   .viewport { min-height: 300px; }
   .region-tools { border-top: 1px solid var(--border); border-left: 0; }

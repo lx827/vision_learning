@@ -1,4 +1,4 @@
-// Shared controls for MVS, DroidCam Client, and OBS DroidCam.
+// Shared controls for MVS, DroidCam, OBS, and native Capture/UVC.
 const state = {
   config: null,
   devices: [],
@@ -11,6 +11,7 @@ const state = {
   previewSequence: -1,
   browserFrameTimes: [],
   scanPromise: null,
+  formatGeneration: 0,
   fpsWarningActive: false,
   lastError: "",
   drawing: false,
@@ -58,6 +59,10 @@ function isObsSource() {
   return $("source-type").value === "obs_droidcam";
 }
 
+function isUvcSource() {
+  return $("source-type").value === "capture_uvc";
+}
+
 function isFrameSource() {
   return !isObsSource();
 }
@@ -66,7 +71,9 @@ function updateSourceUi() {
   const mvs = isMvsSource();
   const client = isDroidCamClient();
   const obs = isObsSource();
+  const uvc = isUvcSource();
   document.body.classList.toggle("obs-mode", obs);
+  document.body.classList.toggle("uvc-mode", uvc);
   document.querySelectorAll(".mvs-only").forEach((element) => {
     element.hidden = !mvs;
   });
@@ -76,17 +83,40 @@ function updateSourceUi() {
   document.querySelectorAll(".frame-source-only").forEach((element) => {
     element.hidden = obs;
   });
+  document.querySelectorAll(".uvc-only").forEach((element) => {
+    element.hidden = !uvc;
+  });
+  $("region-selection-tools").hidden = uvc;
+  document.querySelector(".imaging-panel").hidden = obs || uvc;
+  ["photo-format", "jpeg-quality"].forEach((id) => { $(id).closest(".field").hidden = obs || uvc; });
+  ["recording-fps", "recording-duplicated", "recording-dropped"].forEach((id) => {
+    const value = $(id).parentElement;
+    value.hidden = obs || uvc;
+    value.previousElementSibling.hidden = obs || uvc;
+  });
+  $("output-size-title").textContent = uvc ? "预览最大尺寸" : "统一输出尺寸";
+  $("save-output-size-button").textContent = uvc ? "应用预览尺寸" : "应用输出尺寸";
+  $("metric-lost").parentElement.hidden = obs || uvc;
+  $("output-size-help").textContent = uvc
+    ? "仅缩小网页预览；照片和录像保留采集格式的原始尺寸。MJPEG 不缩小时直接预览。"
+    : "统一控制预览、照片和录像，保持比例缩小；不会放大原图，也不改变相机 ROI 和取景范围。";
+  $("video-format").querySelector('[value="mp4"]').textContent = uvc ? "H.264 / MP4" : "MP4";
+  $("video-format").querySelector('[value="avi"]').textContent = uvc ? "MJPEG 直通 / AVI" : "AVI";
   $("camera-roi-option").disabled = !mvs;
   if (!mvs && $("draw-mode").value === "camera") {
     $("draw-mode").value = "processing";
   }
   $("connection-help").textContent = mvs
     ? "IP 只用于选择已枚举的 MVS 相机，不会修改相机网络配置。"
+    : uvc
+      ? "请先停止 capture.exe 中的采集，再连接网页。先选择设备和格式；光照不足时相机可能自动降低帧率。"
     : client
       ? "通过 DroidCam Client 的 Windows 虚拟摄像头读取画面。"
       : "通过本机 OBS WebSocket 控制 DroidCam 输入；连接时自动准备仅含手机画面的专用场景。";
   $("output-help").textContent = obs
     ? "OBS 截图固定保存为 PNG；录像格式和尺寸沿用 OBS 设置，录像目录在每次开始时应用。"
+    : uvc
+      ? "照片固定为原始尺寸 JPG，拍照会等待曝光稳定。AVI 为 MJPEG 直通；MP4 使用内核 H.264 编码及硬件编码回退。格式或尺寸切换前须断开相机。"
     : "输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。";
   $("empty-state").textContent = obs
     ? "连接 OBS 后在这里显示实时取景预览"
@@ -174,6 +204,10 @@ function fillConfig(config) {
   $("standard-height").value = standard.requested_height ?? 720;
   $("standard-fps").value = standard.requested_fps ?? 30;
   const obs = config.obs_droidcam || {};
+  const uvc = config.capture_uvc || {};
+  $("uvc-library-path").value = uvc.library_path || "../capture/build/bin/capturecore.dll";
+  elements.deviceSelect.dataset.uvcDevice = uvc.device_id || "";
+  $("uvc-format").value = String(uvc.format_index ?? -1);
   $("device-select").dataset.obsSource = obs.source_name || "";
   $("photo-dir").value = config.capture.photo_dir;
   $("video-dir").value = config.capture.video_dir;
@@ -211,6 +245,14 @@ function collectConfig() {
         ? (state.devices[Number(elements.deviceSelect.value)]?.model || elements.deviceSelect.dataset.obsSource || "")
         : (state.config?.obs_droidcam?.source_name || ""),
       photo_prefix: state.config?.obs_droidcam?.photo_prefix || "phone",
+    },
+    capture_uvc: {
+      ...(state.config?.capture_uvc || {}),
+      library_path: $("uvc-library-path").value.trim(),
+      device_id: isUvcSource()
+        ? (state.devices[Number(elements.deviceSelect.value)]?.device_id || elements.deviceSelect.dataset.uvcDevice || "")
+        : (state.config?.capture_uvc?.device_id || ""),
+      format_index: isUvcSource() ? numberValue("uvc-format") : (state.config?.capture_uvc?.format_index ?? -1),
     },
     capture: {
       ...(state.config?.capture || {}),
@@ -255,6 +297,7 @@ async function scanDevicesOnce() {
     elements.deviceSelect.add(new Option("未发现相机", ""));
     logEvent(isMvsSource()
       ? "未发现 MVS 相机，请检查供电、网线和网卡地址。"
+      : isUvcSource() ? "未发现 Capture/UVC 相机，请检查 USB 连接。"
       : isDroidCamClient()
         ? "未发现 DroidCam Client 摄像头，请确认客户端正在显示画面。"
         : "未发现 OBS DroidCam 来源，请确认 OBS、WebSocket 和 DroidCam 插件已启用。", true);
@@ -263,6 +306,7 @@ async function scanDevicesOnce() {
   state.devices.forEach((device, index) => {
     const detail = isMvsSource()
       ? (device.ip || device.serial)
+      : isUvcSource() ? device.user_name
       : isDroidCamClient()
         ? (device.user_name || `编号 ${device.index}`)
         : "OBS 输入源";
@@ -271,16 +315,17 @@ async function scanDevicesOnce() {
   const configured = state.devices.findIndex((device) => isMvsSource()
     ? ((state.config.camera.ip && device.ip === state.config.camera.ip)
       || (state.config.camera.serial && device.serial === state.config.camera.serial))
+    : isUvcSource() ? device.device_id === (state.config.capture_uvc?.device_id || elements.deviceSelect.dataset.uvcDevice)
     : isDroidCamClient()
       ? device.index === numberValue("standard-camera-index")
       : device.model === (state.config.obs_droidcam?.source_name || elements.deviceSelect.dataset.obsSource));
   elements.deviceSelect.value = String(configured >= 0 ? configured : 0);
-  selectDevice();
-  const sourceLabel = isMvsSource() ? "台 MVS 相机" : isDroidCamClient() ? "个 DroidCam Client 摄像头" : "个 OBS DroidCam 来源";
+  await selectDevice();
+  const sourceLabel = isMvsSource() ? "台 MVS 相机" : isUvcSource() ? "台 Capture/UVC 相机" : isDroidCamClient() ? "个 DroidCam Client 摄像头" : "个 OBS DroidCam 来源";
   logEvent(`发现 ${state.devices.length} ${sourceLabel}。`);
 }
 
-function selectDevice() {
+async function selectDevice() {
   const device = state.devices[Number(elements.deviceSelect.value)];
   if (!device) return;
   if (isMvsSource()) {
@@ -288,8 +333,35 @@ function selectDevice() {
     $("camera-serial").value = device.serial;
   } else if (isDroidCamClient()) {
     $("standard-camera-index").value = device.index;
+  } else if (isUvcSource()) {
+    elements.deviceSelect.dataset.uvcDevice = device.device_id;
+    await loadUvcFormats(device.device_id);
   } else {
     elements.deviceSelect.dataset.obsSource = device.model;
+  }
+}
+
+async function loadUvcFormats(deviceId) {
+  const generation = ++state.formatGeneration;
+  const select = $("uvc-format");
+  select.disabled = true;
+  $("uvc-format-help").textContent = "正在读取设备格式…";
+  try {
+    const payload = await api(`/api/capture-uvc/formats?device_id=${encodeURIComponent(deviceId)}`);
+    if (generation !== state.formatGeneration || !isUvcSource()) return;
+    select.replaceChildren(new Option("自动选择（优先 MJPEG）", "-1"));
+    payload.formats.forEach((format) => select.add(new Option(
+      `${format.name} · ${format.width} × ${format.height} · ${format.fps} FPS`, String(format.index),
+    )));
+    const configured = state.config?.capture_uvc;
+    select.value = configured?.device_id === deviceId ? String(configured.format_index) : "-1";
+    if (!select.value) select.value = "-1";
+    $("uvc-format-help").textContent = `已读取 ${payload.formats.length} 种格式；标称帧率以实际采集为准。`;
+  } catch (error) {
+    if (generation === state.formatGeneration) $("uvc-format-help").textContent = error.message;
+    throw error;
+  } finally {
+    if (generation === state.formatGeneration) select.disabled = Boolean(state.status.connected);
   }
 }
 
@@ -299,6 +371,7 @@ async function connectOrDisconnect() {
     updateStatus(payload.status);
     logEvent(isMvsSource()
       ? "MVS 相机已断开，SDK 资源已释放。"
+      : isUvcSource() ? "Capture/UVC 已断开，原生会话已释放。"
       : isDroidCamClient()
         ? "DroidCam Client 已断开，OpenCV 读取句柄已释放。"
         : "OBS DroidCam 控制已断开。");
@@ -417,6 +490,9 @@ function updateStatus(status) {
   elements.drawRegionButton.disabled = !connected || !isFrameSource();
   elements.restoreFullRoiButton.disabled = !connected || !mvs;
   $("source-type").disabled = connected;
+  $("uvc-library-path").disabled = connected && isUvcSource();
+  $("uvc-format").disabled = connected && isUvcSource();
+  elements.deviceSelect.disabled = connected && isUvcSource();
   elements.autoButton.textContent = status.auto_capture ? "停止自动拍照" : "开始自动拍照";
   elements.recordButton.querySelector("span").textContent = status.recording ? "停止录像" : "开始录像";
   elements.recordButton.classList.toggle("active", Boolean(status.recording));
@@ -428,7 +504,9 @@ function updateStatus(status) {
   $("metric-preview-resolution").textContent = status.preview_width ? `${status.preview_width} × ${status.preview_height}` : "—";
   $("metric-capture-fps").textContent = Number(status.capture_fps ?? status.fps ?? 0).toFixed(1);
   $("metric-preview-fps").textContent = Number(status.preview_fps || 0).toFixed(1);
-  $("metric-lost").textContent = status.lost_packets || 0;
+  $("metric-lost").textContent = isUvcSource() ? "—" : (status.lost_packets || 0);
+  $("uvc-written-frames").textContent = status.recording_result?.frames_written ?? "—";
+  $("uvc-encoder").textContent = status.recording_result?.encoder || "停止录像后显示";
   $("last-photo").textContent = status.last_photo || "—";
   $("last-photo").title = status.last_photo || "";
   $("recording-path").textContent = status.recording_path || "—";
@@ -1010,8 +1088,11 @@ async function pollStatus() {
 }
 
 function bindEvents() {
-  elements.deviceSelect.addEventListener("change", selectDevice);
+  elements.deviceSelect.addEventListener("change", () => {
+    selectDevice().catch((error) => { showToast(error.message, true); logEvent(error.message, true); });
+  });
   $("source-type").addEventListener("change", () => {
+    state.formatGeneration += 1;
     updateSourceUi();
     updateStatus(state.status);
     state.devices = [];
@@ -1021,7 +1102,7 @@ function bindEvents() {
   $("scan-button").addEventListener("click", (event) => withBusy(event.currentTarget, scanDevices).catch(() => {}));
   $("save-config-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig()).catch(() => {}));
   $("save-output-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig("输出设置已保存")).catch(() => {}));
-  $("save-output-size-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig("输出尺寸已应用")).catch(() => {}));
+  $("save-output-size-button").addEventListener("click", (event) => withBusy(event.currentTarget, () => saveConfig(isUvcSource() ? "预览尺寸已应用" : "输出尺寸已应用")).catch(() => {}));
   elements.connectButton.addEventListener("click", (event) => withBusy(event.currentTarget, connectOrDisconnect).catch(() => {}));
   elements.snapshotButton.addEventListener("click", (event) => withBusy(event.currentTarget, takeSnapshot).catch(() => {}));
   elements.autoButton.addEventListener("click", (event) => withBusy(event.currentTarget, toggleAutoCapture).catch(() => {}));
