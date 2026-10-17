@@ -61,6 +61,29 @@ class Stats(ct.Structure):
     ]
 
 
+class PropOption(ct.Structure):
+    _fields_ = [("value", ct.c_int32), ("name", ct.c_char * 32)]
+
+
+class PropMeta(ct.Structure):
+    _fields_ = [
+        ("struct_size", ct.c_uint32),
+        ("id", ct.c_uint32),
+        ("name", ct.c_char * 48),
+        ("type", ct.c_int),
+        ("min", ct.c_int64),
+        ("max", ct.c_int64),
+        ("step", ct.c_int64),
+        ("def", ct.c_int64),
+        ("current", ct.c_int64),
+        ("current_is_auto", ct.c_int32),
+        ("flags", ct.c_uint32),
+        ("option_count", ct.c_uint32),
+        ("options", PropOption * 16),
+        ("unit", ct.c_uint32),
+    ]
+
+
 class RecordConfig(ct.Structure):
     _fields_ = [
         ("struct_size", ct.c_uint32),
@@ -187,6 +210,23 @@ class CaptureCore:
         bind("cap_record_start", ct.c_int, ptr, ct.c_char_p, ct.POINTER(RecordConfig))
         bind("cap_record_stop", ct.c_int, ptr, ct.POINTER(RecordResult))
         bind("cap_recording", ct.c_int32, ptr)
+        bind(
+            "cap_prop_list",
+            ct.c_int,
+            ptr,
+            ct.POINTER(PropMeta),
+            ct.POINTER(ct.c_uint32),
+        )
+        bind(
+            "cap_prop_get",
+            ct.c_int,
+            ptr,
+            ct.c_uint32,
+            ct.POINTER(ct.c_int64),
+            ct.POINTER(ct.c_int32),
+        )
+        bind("cap_prop_set", ct.c_int, ptr, ct.c_uint32, ct.c_int64)
+        bind("cap_prop_set_auto", ct.c_int, ptr, ct.c_uint32, ct.c_int32)
 
     def check(self, code: int) -> None:
         if code != 0:
@@ -230,6 +270,59 @@ class CaptureCamera:
     def __init__(self, core: CaptureCore, handle: ct.c_void_p):
         self.core, self.handle = core, handle
         self._buffer = None
+
+    def properties(self) -> list[dict]:
+        """每次现查能力、运行态和现值，避免将默认值误当成相机读数。"""
+        dll = self.core.dll
+        count = ct.c_uint32()
+        code = dll.cap_prop_list(self.handle, None, ct.byref(count))
+        if code == 5:  # CAP_ERR_UNSUPPORTED：设备没有属性通道。
+            return []
+        self.core.check(code)
+        for _ in range(3):
+            array = (PropMeta * count.value)()
+            for meta in array:
+                meta.struct_size = ct.sizeof(PropMeta)
+            code = dll.cap_prop_list(self.handle, array, ct.byref(count))
+            if code == 2:
+                continue
+            self.core.check(code)
+            result = []
+            for meta in array[: count.value]:
+                value, automatic = ct.c_int64(), ct.c_int32()
+                self.core.check(
+                    dll.cap_prop_get(
+                        self.handle, meta.id, ct.byref(value), ct.byref(automatic)
+                    )
+                )
+                result.append(
+                    {
+                        "id": meta.id,
+                        "name": _text(meta.name),
+                        "type": meta.type,
+                        "minimum": meta.min,
+                        "maximum": meta.max,
+                        "step": meta.step,
+                        "default": getattr(meta, "def"),
+                        "value": value.value,
+                        "is_auto": bool(automatic.value),
+                        "flags": meta.flags,
+                        "unit": meta.unit,
+                        "options": [
+                            {"value": option.value, "name": _text(option.name)}
+                            for option in meta.options[: min(meta.option_count, 16)]
+                        ],
+                    }
+                )
+            return result
+        raise CaptureError("成像参数能力发生变化，请刷新参数后重试")
+
+    def set_property(self, property_id: int, value: int, *, boolean=False) -> None:
+        code = self.core.dll.cap_prop_set(self.handle, property_id, value)
+        # 与官方前端相同：某些 Windows 布尔项需通过自动模式接口写入。
+        if boolean and code in (1, 5):
+            code = self.core.dll.cap_prop_set_auto(self.handle, property_id, value)
+        self.core.check(code)
 
     def formats(self) -> list[dict]:
         count = ct.c_uint32()

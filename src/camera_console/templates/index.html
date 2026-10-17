@@ -220,6 +220,12 @@
           <section class="panel imaging-panel frame-source-only">
             <h2>成像参数</h2>
             <p class="help client-only" id="standard-imaging-help" hidden>DroidCam 客户端模式只读取画面；镜头、曝光、对焦和白平衡请在 DroidCam 中设置。</p>
+            <fieldset id="uvc-imaging-fields" class="uvc-only" disabled hidden>
+              <p class="help" id="uvc-imaging-help" role="status" aria-live="polite">连接后读取设备实际支持的成像参数。</p>
+              <button class="button" id="refresh-uvc-parameters-button" type="button">刷新成像参数</button>
+              <div class="form-grid two-columns" id="uvc-properties"></div>
+              <p class="help">每项点击“应用”后即时生效，并回读设备实际值。自动模式下的从属项不可手动修改；切换模式后会刷新可写状态。参数不会保存到网页配置。</p>
+            </fieldset>
             <fieldset id="imaging-fields" disabled>
               <div class="form-grid two-columns">
                 <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>

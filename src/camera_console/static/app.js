@@ -87,7 +87,8 @@ function updateSourceUi() {
     element.hidden = !uvc;
   });
   $("region-selection-tools").hidden = uvc;
-  document.querySelector(".imaging-panel").hidden = obs || uvc;
+  document.querySelector(".imaging-panel").hidden = obs;
+  elements.imagingFields.hidden = uvc;
   ["photo-format", "jpeg-quality"].forEach((id) => { $(id).closest(".field").hidden = obs || uvc; });
   ["recording-fps", "recording-duplicated", "recording-dropped"].forEach((id) => {
     const value = $(id).parentElement;
@@ -485,6 +486,11 @@ function updateStatus(status) {
   elements.autoButton.disabled = !connected;
   elements.recordButton.disabled = !connected;
   elements.imagingFields.disabled = !connected || !mvs;
+  $("uvc-imaging-fields").disabled = !connected || !isUvcSource();
+  if (isUvcSource() && !connected) {
+    $("uvc-properties").replaceChildren();
+    $("uvc-imaging-help").textContent = "连接后读取设备实际支持的成像参数。";
+  }
   updateExposureFpsGuidance();
   elements.roiFields.disabled = !connected || !mvs;
   elements.drawRegionButton.disabled = !connected || !isFrameSource();
@@ -878,6 +884,10 @@ async function loadParameters() {
   const payload = await api("/api/camera/parameters");
   const p = payload.parameters;
   state.parameters = p;
+  if (isUvcSource()) {
+    renderUvcParameters(p);
+    return;
+  }
   applyFeature("exposure-value", p.exposure_us, "exposure-range");
   applyFeature("gain-value", p.gain_db, "gain-range");
   applyFeature("fps-value", p.frame_rate, "fps-range");
@@ -905,6 +915,90 @@ async function loadParameters() {
       ? "拖框后会按相机步长对齐，应用后框外不再采集。"
       : "只保存算法区域坐标，完整画面保留；当前尚未接入处理算法。";
   }
+}
+
+const uvcPropertyLabels = {
+  1: "亮度", 2: "对比度", 3: "饱和度", 4: "色调", 5: "锐度", 6: "增益",
+  7: "伽马", 8: "自动白平衡", 9: "白平衡色温", 10: "工频抗闪烁",
+  11: "曝光模式", 12: "曝光时间", 13: "允许自动曝光降低帧率",
+  14: "自动对焦", 15: "对焦位置", 16: "变焦", 17: "水平转动",
+  18: "垂直转动", 19: "旋转",
+};
+
+function renderUvcParameters(parameters) {
+  const properties = parameters.uvc_properties || [];
+  const container = $("uvc-properties");
+  container.replaceChildren();
+  const exposureAvailable = properties.some((property) => [11, 12].includes(property.id));
+  $("uvc-imaging-help").textContent = properties.length
+    ? `已读取 ${properties.length} 项成像参数。${exposureAvailable ? "" : "当前设备的 Windows 驱动未暴露曝光控制，网页无法调节曝光。"}`
+    : "当前设备或驱动未提供可用的成像参数。";
+  properties.forEach((property) => {
+    const field = document.createElement("div");
+    field.className = "field";
+    const label = document.createElement("label");
+    const unit = { 1: "%", 2: "K", 3: "μs", 4: "Hz" }[property.unit] || "";
+    const title = uvcPropertyLabels[property.id] || property.name;
+    label.textContent = `${title}${unit ? `（${unit}）` : ""}`;
+    const control = document.createElement(property.type === 0 ? "input" : "select");
+    control.id = `uvc-property-${property.id}`;
+    label.htmlFor = control.id;
+    if (property.type === 0) {
+      control.type = "number";
+      control.min = property.minimum;
+      control.max = property.maximum;
+      control.step = property.step > 0 ? property.step : 1;
+    } else {
+      const exposureNames = { 0: "手动", 1: "全自动", 2: "快门优先", 3: "光圈优先" };
+      const options = property.type === 1
+        ? [{ value: 0, name: "关闭" }, { value: 1, name: "开启" }]
+        : property.options.map((option) => ({
+          value: option.value,
+          name: property.id === 11 ? (exposureNames[option.value] || option.name) : option.name,
+        }));
+      options.forEach((option) => control.add(new Option(option.name, String(option.value))));
+      if (!options.some((option) => option.value === property.value)) {
+        const unknown = new Option(`当前值：${property.value}（未列出的选项）`, String(property.value));
+        unknown.disabled = true;
+        control.add(unknown);
+      }
+    }
+    control.value = property.value;
+    const locked = Boolean((property.flags & 3) || property.is_auto);
+    control.disabled = locked;
+    const help = document.createElement("small");
+    help.id = `${control.id}-help`;
+    help.textContent = `设备当前值：${property.value}${unit ? ` ${unit}` : ""}。`
+      + (property.type === 0 ? `范围 ${property.minimum}–${property.maximum}；${property.step > 0 ? `步长 ${property.step}` : "由驱动按档位换算"}。` : "")
+      + (property.flags & 2 ? "设备暂时禁用。" : property.is_auto ? "自动模式控制中。" : property.flags & 1 ? "当前只读。" : "");
+    control.setAttribute("aria-describedby", help.id);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button";
+    button.textContent = "应用";
+    button.setAttribute("aria-label", `应用${title}`);
+    button.disabled = locked;
+    button.addEventListener("click", () => withBusy(button, async () => {
+      if (!control.value || !control.reportValidity()) throw new Error("请输入设备允许的参数值");
+      const value = Number(control.value);
+      if (!Number.isSafeInteger(value)) throw new Error("成像参数必须为有效整数");
+      try {
+        const payload = await api("/api/camera/parameters", {
+          method: "PUT", body: JSON.stringify({ property_id: property.id, value }),
+        });
+        state.parameters = payload.parameters;
+        renderUvcParameters(payload.parameters);
+        showToast(`${title}已应用，已回读设备实际值`);
+        logEvent(`${title}已写入相机。`);
+      } catch (error) {
+        // 写入或回读失败也刷新，避免继续展示已经过期的模式锁定状态。
+        await loadParameters().catch(() => {});
+        throw error;
+      }
+    }).catch(() => {}));
+    field.append(label, control, help, button);
+    container.append(field);
+  });
 }
 
 function sensorDimensions() {
@@ -1111,6 +1205,7 @@ function bindEvents() {
     $("event-log").replaceChildren();
   });
   $("apply-parameters-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyParameters).catch(() => {}));
+  $("refresh-uvc-parameters-button").addEventListener("click", (event) => withBusy(event.currentTarget, loadParameters).catch(() => {}));
   $("apply-roi-button").addEventListener("click", (event) => withBusy(event.currentTarget, applyRoi).catch(() => {}));
   elements.drawRegionButton.addEventListener("click", toggleDrawing);
   elements.applyRegionButton.addEventListener("click", (event) => withBusy(event.currentTarget, applyDrawnRegion).then(() => {

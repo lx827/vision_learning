@@ -21,6 +21,8 @@ from src.capture_uvc.sdk import (
     Frame,
     DeviceInfo,
     Format,
+    PropMeta,
+    PropOption,
     RecordConfig,
     RecordResult,
     Stats,
@@ -65,6 +67,62 @@ class FakeCamera:
 
     def start(self, index):
         self.format_index = index
+
+    def properties(self):
+        return [
+            {
+                "id": 8,
+                "name": "white_balance_auto",
+                "type": 1,
+                "minimum": 0,
+                "maximum": 1,
+                "step": 1,
+                "default": 0,
+                "value": getattr(self, "wb_auto", 1),
+                "is_auto": False,
+                "flags": 0,
+                "unit": 0,
+                "options": [],
+            },
+            {
+                "id": 9,
+                "name": "white_balance_kelvin",
+                "type": 0,
+                "minimum": 2800,
+                "maximum": 6500,
+                "step": 10,
+                "default": 4600,
+                "value": getattr(self, "wb_kelvin", 4600),
+                "is_auto": bool(getattr(self, "wb_auto", 1)),
+                "flags": 0,
+                "unit": 2,
+                "options": [],
+            },
+            {
+                "id": 11,
+                "name": "exposure_auto",
+                "type": 2,
+                "minimum": 0,
+                "maximum": 3,
+                "step": 1,
+                "default": 1,
+                "value": getattr(self, "exposure_mode", 1),
+                "is_auto": False,
+                "flags": 0,
+                "unit": 0,
+                "options": [
+                    {"value": 0, "name": "manual"},
+                    {"value": 1, "name": "auto"},
+                ],
+            },
+        ]
+
+    def set_property(self, property_id, value, *, boolean=False):
+        setattr(
+            self,
+            {8: "wb_auto", 9: "wb_kelvin", 11: "exposure_mode"}[property_id],
+            value,
+        )
 
     def latest_frame(self, after=None):
         assert not self.closed, "禁止在关闭后取帧"
@@ -166,6 +224,11 @@ def test_abi_struct_layouts_match_capturecore_header_on_64_bit():
     ] == [400, 16, 48, 24, 40, 312]
     assert Frame.data.offset == 32
     assert Frame.size.offset == 40
+    assert ct.sizeof(PropOption) == 36
+    assert ct.sizeof(PropMeta) == 696
+    assert PropMeta.current.offset == 96
+    assert PropMeta.options.offset == 116
+    assert PropMeta.unit.offset == 692
 
 
 def test_latest_frame_retries_buffer_growth_and_copies_owned_bytes():
@@ -191,6 +254,96 @@ def test_latest_frame_retries_buffer_growth_and_copies_owned_bytes():
 def test_missing_library_error_is_actionable(tmp_path):
     with pytest.raises(CaptureError, match="找不到 Capture 内核"):
         CaptureCore(str(tmp_path / "missing.dll"))
+
+
+def test_properties_read_live_values_instead_of_metadata_defaults():
+    class PropertiesDll:
+        def cap_prop_list(self, handle, output, count):
+            ct.cast(count, ct.POINTER(ct.c_uint32)).contents.value = 1
+            if output is not None:
+                assert output[0].struct_size == ct.sizeof(PropMeta)
+                output[0].id, output[0].name = 11, b"exposure_auto"
+                output[0].type, output[0].current = 2, 0
+                output[0].option_count = 2
+                output[0].options[0] = PropOption(0, b"manual")
+                output[0].options[1] = PropOption(1, b"auto")
+            return 0
+
+        def cap_prop_get(self, handle, property_id, value, automatic):
+            assert property_id == 11
+            ct.cast(value, ct.POINTER(ct.c_int64)).contents.value = 1
+            ct.cast(automatic, ct.POINTER(ct.c_int32)).contents.value = 0
+            return 0
+
+    camera = CaptureCamera(
+        SimpleNamespace(dll=PropertiesDll(), check=lambda code: None), ct.c_void_p(1)
+    )
+    prop = camera.properties()[0]
+    assert prop["value"] == 1
+    assert prop["options"] == [
+        {"value": 0, "name": "manual"},
+        {"value": 1, "name": "auto"},
+    ]
+
+
+@pytest.mark.parametrize("error", [1, 5, 7])
+def test_boolean_property_uses_auto_interface_only_for_semantic_rejection(error):
+    calls = []
+    dll = SimpleNamespace(
+        cap_prop_set=lambda *args: error,
+        cap_prop_set_auto=lambda *args: calls.append(args) or 0,
+    )
+    checked = []
+    camera = CaptureCamera(
+        SimpleNamespace(dll=dll, check=checked.append), ct.c_void_p(1)
+    )
+    camera.set_property(8, 0, boolean=True)
+    assert len(calls) == (0 if error == 7 else 1)
+    assert checked == ([7] if error == 7 else [0])
+
+
+def test_native_parameters_refresh_auto_locks_and_reject_invalid_writes(native):
+    service, _ = native
+    with pytest.raises(CaptureError, match="先连接"):
+        service.get_parameters()
+    service.connect()
+    with pytest.raises(CaptureError, match="自动模式"):
+        service.apply_parameters({"property_id": 9, "value": 4700})
+    result = service.apply_parameters({"property_id": 8, "value": 0})
+    assert not result["uvc_properties"][1]["is_auto"]
+    result = service.apply_parameters({"property_id": 9, "value": 4700})
+    assert result["uvc_properties"][1]["value"] == 4700
+    for payload in (
+        {"property_id": 9, "value": 4701},  # 不满足设备步长。
+        {"property_id": 9, "value": 7000},
+        {"property_id": 8, "value": 2},
+        {"property_id": 11, "value": 2},  # 菜单范围内但不在可用选项中。
+        {"property_id": 12, "value": 5000},  # 设备未暴露曝光时间。
+        {"property_id": 8, "value": True},
+        {"property_id": 8, "value": 0.5},
+        {"exposure_us": 5000},
+    ):
+        with pytest.raises(CaptureError):
+            service.apply_parameters(payload)
+    service.apply_parameters({"property_id": 8, "value": 1})
+    with pytest.raises(CaptureError, match="自动模式"):
+        service.apply_parameters({"property_id": 9, "value": 4800})
+
+
+def test_native_parameter_errors_and_empty_capabilities_are_not_hidden(native):
+    service, _ = native
+    service.connect()
+    service._camera.properties = lambda: []
+    assert service.get_parameters()["uvc_properties"] == []
+    with pytest.raises(CaptureError, match="未提供"):
+        service.apply_parameters({"property_id": 12, "value": 5000})
+
+    def failed_read():
+        raise CaptureError("设备属性读取失败")
+
+    service._camera.properties = failed_read
+    with pytest.raises(CaptureError, match="读取失败"):
+        service.get_parameters()
 
 
 def test_unchanged_frame_only_queries_metadata_without_copying():
@@ -416,6 +569,23 @@ def test_web_routes_native_source_and_blocks_switch_while_connected(tmp_path):
             == "capture_uvc"
         )
         assert client.get("/api/camera/frame?after=-1").mimetype == "image/jpeg"
+        assert (
+            client.get("/api/camera/parameters").get_json()["parameters"][
+                "uvc_properties"
+            ][0]["id"]
+            == 8
+        )
+        response = client.put(
+            "/api/camera/parameters", json={"property_id": 8, "value": 0}
+        )
+        assert response.status_code == 200
+        assert response.get_json()["parameters"]["uvc_properties"][0]["value"] == 0
+        assert (
+            client.put(
+                "/api/camera/parameters", json={"property_id": 12, "value": 5000}
+            ).status_code
+            == 400
+        )
         assert Path(client.post("/api/capture/snapshot").get_json()["path"]).exists()
         config = shared.config.to_dict()
         config["source_type"] = "mvs"

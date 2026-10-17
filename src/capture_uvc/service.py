@@ -320,12 +320,45 @@ class CaptureUvcService:
             return after, None
 
     def get_parameters(self):
-        return {"capabilities": {}, "controls_external": True}
+        with self._lock:
+            return {
+                "capabilities": {},
+                "uvc_properties": self._require_camera().properties(),
+            }
 
     def apply_parameters(self, payload):
-        raise CaptureError(
-            "Capture/UVC 成像参数请在 capture.exe 中设置；本网页当前提供格式选择与采集控制"
-        )
+        # 每次仅写一个属性；模式切换后重新枚举，不能沿用旧的只读状态。
+        with self._lock:
+            camera = self._require_camera()
+            if not isinstance(payload, dict) or set(payload) != {
+                "property_id",
+                "value",
+            }:
+                raise CaptureError("请提供单个成像参数的 property_id 和 value")
+            property_id, value = payload["property_id"], payload["value"]
+            if type(property_id) is not int or type(value) is not int:
+                raise CaptureError("成像参数编号和值必须为整数")
+            meta = next(
+                (p for p in camera.properties() if p["id"] == property_id), None
+            )
+            if meta is None:
+                raise CaptureError("当前设备或驱动未提供此成像参数")
+            if meta["flags"] & 3 or meta["is_auto"]:
+                raise CaptureError(
+                    "当前参数只读、已禁用或由自动模式控制；请先切换对应模式"
+                )
+            if meta["type"] == 2:
+                valid = value in {option["value"] for option in meta["options"]}
+            elif meta["type"] == 1:
+                valid = value in (0, 1)
+            else:
+                valid = meta["minimum"] <= value <= meta["maximum"]
+                if meta["step"] > 0:
+                    valid = valid and (value - meta["minimum"]) % meta["step"] == 0
+            if not valid:
+                raise CaptureError("成像参数值不在设备允许的范围、步长或选项中")
+            camera.set_property(property_id, value, boolean=meta["type"] == 1)
+            return self.get_parameters()
 
     def apply_roi(self, payload):
         raise CaptureError("Capture/UVC 不提供 MVS 硬件 ROI")
