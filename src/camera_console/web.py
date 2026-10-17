@@ -28,7 +28,12 @@ from src.capture_uvc.service import CaptureUvcService
 class _QuietCameraRequestHandler(WSGIRequestHandler):
     """隐藏高频成功轮询，同时保留操作请求和错误访问日志。"""
 
-    _QUIET_PATHS = {"/api/camera/frame", "/api/camera/status"}
+    _QUIET_PATHS = {
+        "/api/camera/frame",
+        "/api/camera/status",
+        "/api/count/frame",
+        "/api/count/status",
+    }
 
     def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
         try:

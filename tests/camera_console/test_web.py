@@ -53,7 +53,12 @@ def test_request_handler_only_suppresses_successful_high_frequency_requests(monk
     )
     handler = object.__new__(_QuietCameraRequestHandler)
 
-    for path in ("/api/camera/frame?after=10", "/api/camera/status"):
+    for path in (
+        "/api/camera/frame?after=10",
+        "/api/camera/status",
+        "/api/count/frame?after=10",
+        "/api/count/status",
+    ):
         handler.path = path
         handler.log_request(200, 123)
         handler.log_request(204, 0)
@@ -62,10 +67,22 @@ def test_request_handler_only_suppresses_successful_high_frequency_requests(monk
     handler.log_request(500, 0)
     handler.path = "/api/camera/connect"
     handler.log_request(200, 456)
+    handler.path = "/api/count/frame?after=10"
+    handler.log_request(500, 0)
+    handler.path = "/api/count/status"
+    handler.log_request(400, 0)
+    for path in ("/api/count/start", "/api/count/stop", "/api/count/reset"):
+        handler.path = path
+        handler.log_request(200, 456)
 
     assert logged == [
         ("/api/camera/frame?after=10", 500, 0),
         ("/api/camera/connect", 200, 456),
+        ("/api/count/frame?after=10", 500, 0),
+        ("/api/count/status", 400, 0),
+        ("/api/count/start", 200, 456),
+        ("/api/count/stop", 200, 456),
+        ("/api/count/reset", 200, 456),
     ]
 
 
