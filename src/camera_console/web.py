@@ -19,6 +19,7 @@ from werkzeug.serving import WSGIRequestHandler
 from .config import CameraConfigStore, CameraConsoleConfig
 from src.mvs.sdk import MvsError
 from .service import FrameCameraService
+from .counting import CountingService
 from src.droidcam.obs import ObsError, ObsService
 from src.capture_uvc.sdk import CaptureError
 from src.capture_uvc.service import CaptureUvcService
@@ -72,6 +73,12 @@ def create_app(
     def uses_obs() -> bool:
         return camera_service.config.source_type == "obs_droidcam"
 
+    def current_camera():
+        return native if camera_service.config.source_type == "capture_uvc" else camera_service
+
+    counting = CountingService(current_camera, "configs/scallop_count.yaml")
+    app.config["COUNTING_SERVICE"] = counting
+
     def normalized_obs_status() -> dict[str, Any]:
         status = obs.status()
         source = status["selected_source"]
@@ -118,8 +125,58 @@ def create_app(
         }
 
     @app.get("/")
+    @app.get("/workbench")
     def index():
-        return render_template("index.html")
+        response = app.make_response(render_template("workbench.html"))
+        # The console is the top-level page, never an iframe destination.
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
+
+    @app.get("/camera-settings")
+    def camera_settings_page():
+        return render_template("camera.html")
+
+    @app.get("/counter")
+    def counter_page():
+        return render_template("count.html")
+
+    @app.get("/api/count/status")
+    def count_status():
+        return _ok(status=counting.status)
+
+    @app.post("/api/count/start")
+    def count_start():
+        return _ok(status=counting.start(_json_body(required=False)))
+
+    @app.post("/api/count/stop")
+    def count_stop():
+        return _ok(status=counting.stop())
+
+    @app.post("/api/count/reset")
+    def count_reset():
+        return _ok(status=counting.reset())
+
+    @app.get("/api/count/frame")
+    def count_frame():
+        after = request.args.get("after", default=-1, type=int)
+        sequence, jpeg = counting.wait_for_frame(after)
+        if jpeg is None or sequence == after:
+            return Response(status=204, headers={"Cache-Control": "no-store"})
+        return Response(jpeg, mimetype="image/jpeg", headers={"X-Frame-Sequence": str(sequence), "Cache-Control": "no-store"})
+
+    @app.get("/api/count/stream")
+    def count_stream():
+        def generate():
+            sequence = -1
+            while True:
+                sequence, jpeg = counting.wait_for_frame(sequence)
+                if jpeg is None:
+                    if not counting.status["active"]:
+                        return
+                    continue
+                yield b"--frame\r\nContent-Type: image/jpeg\r\nCache-Control: no-cache\r\n\r\n" + jpeg + b"\r\n"
+
+        return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
     @app.get("/api/health")
     def health():
@@ -363,6 +420,7 @@ def create_app(
         atexit.register(obs.close)
     if capture_service is None:
         atexit.register(native.close)
+    atexit.register(counting.stop)
     return app
 
 

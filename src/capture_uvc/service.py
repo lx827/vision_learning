@@ -319,6 +319,24 @@ class CaptureUvcService:
         except CaptureError:
             return after, None
 
+    def latest_image(self, after: int | None = None, timeout: float = 2.0):
+        """Return the newest decoded frame without competing with the preview worker."""
+        with self._condition:
+            self._require_camera()
+            previous = -1 if after is None else after
+            self._condition.wait_for(
+                lambda: self._preview_sequence > previous
+                or not self._connected
+                or self._error,
+                timeout,
+            )
+            if self._error:
+                raise CaptureError(self._error)
+            if not self._connected or self._preview_sequence <= previous:
+                return None
+            frame = self._frame
+        return None if frame is None else (frame.sequence, decode_frame(frame))
+
     def get_parameters(self):
         with self._lock:
             return {

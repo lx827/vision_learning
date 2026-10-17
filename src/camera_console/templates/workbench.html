@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>“贝启者”视觉调试台</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='workbench.css') }}">
+</head>
+<body>
+  <div class="console-shell">
+    <header class="console-header">
+      <div class="brand-line">
+        <h1>“贝启者”视觉调试台</h1>
+      </div>
+    </header>
+    <nav class="module-nav" aria-label="功能页面">
+      <button class="module-tab selected" data-page="camera-page" type="button">相机设置</button>
+      <button class="module-tab" data-page="count-page" type="button">扇贝个数实时检测</button>
+    </nav>
+    <main class="page-stage">
+      <section class="page-view visible" id="camera-page" aria-label="相机设置页面">
+        <iframe src="/camera-settings?embedded=1" title="相机设置" loading="eager"></iframe>
+      </section>
+      <section class="page-view" id="count-page" aria-label="扇贝个数实时检测页面">
+        <iframe src="/counter?embedded=1" title="扇贝个数实时检测" loading="lazy"></iframe>
+      </section>
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='workbench.js') }}" defer></script>
+</body>
+</html>

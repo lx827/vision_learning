@@ -23,17 +23,19 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .5; }
 :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-.app { width: min(1200px, calc(100% - 32px)); margin: 0 auto; padding: 16px 0 32px; }
+.app { width: calc(100% - 32px); margin: 0 auto; padding: 16px 0 32px; }
 .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; padding: 4px 0 14px; border-bottom: 2px solid #333; }
 h1, h2, p { margin: 0; }
 h1 { font-size: 20px; }
 h2 { font-size: 15px; }
 .header p { margin-top: 4px; color: var(--muted); font-size: 13px; }
-.connection-status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; }
+.connection-status { display: flex; align-items: center; gap: 7px; margin-left: auto; color: var(--muted); font-size: 13px; }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; }
 .connection-status.online .status-dot { background: var(--success); }
 
 main { display: flex; flex-direction: column; gap: 16px; }
+.workspace-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
+.camera-workspace { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
 .panel { padding: 14px 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
 .panel-title, .preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel h2 { margin-bottom: 12px; }
@@ -148,7 +150,7 @@ fieldset { margin: 0; padding: 0; border: 0; }
 @media (max-width: 800px) {
   .app { width: min(100% - 24px, 1200px); padding-top: 12px; }
   .header { align-items: flex-start; }
-  .connection-grid, .obs-mode .connection-grid, .uvc-mode .connection-grid, .two-columns, .section-grid, .preview-workspace { grid-template-columns: 1fr; }
+  .connection-grid, .obs-mode .connection-grid, .uvc-mode .connection-grid, .two-columns, .section-grid, .preview-workspace, .workspace-layout { grid-template-columns: 1fr; }
   .sdk-field, .field.full { grid-column: auto; }
   .viewport { min-height: 300px; }
   .region-tools { border-top: 1px solid var(--border); border-left: 0; }

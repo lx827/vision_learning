@@ -132,7 +132,7 @@ python scripts/mvs_probe.py --snapshot
 python scripts/camera_web.py
 ```
 
-服务就绪后会自动打开浏览器并访问 `http://127.0.0.1:8765`。各来源的连接参数和输出配置保存在 `configs/camera/camera.yaml`；页面中的 IP 只用于选择已经枚举出的 MVS 设备，不会修改相机自身的网络配置。如需只启动服务而不打开浏览器，可运行 `python scripts/camera_web.py --no-browser`。旧命令 `python scripts/mvs_web.py` 仍可作为兼容入口使用。
+服务就绪后会自动打开浏览器并访问 `http://127.0.0.1:8765`，进入“贝启者”视觉调试台。页面统一提供“相机设置”和“扇贝个数实时检测”两个标签，不再区分新旧版；原 `/workbench` 地址仍可访问同一页面。各来源的连接参数和输出配置保存在 `configs/camera/camera.yaml`；页面中的 IP 只用于选择已经枚举出的 MVS 设备，不会修改相机自身的网络配置。需要自动打开网页时不要添加 `--no-browser`；该参数仅用于明确禁止打开浏览器的场景。旧命令 `python scripts/mvs_web.py` 仍可作为兼容入口使用。
 
 MVS 和 DroidCam Client 的取流、网页预览编码和录像编码分别在独立后台线程中执行。网页每次只请求最新预览帧，处理或显示跟不上时会跳过旧预览帧，不会在浏览器中排队播放过时画面。这两种来源使用一组最大宽高统一控制预览、照片和录像；三类输出都等比例缩小，且不会放大较小的原图或裁剪取景范围。Capture/UVC 的最大宽高仅限制预览，拍照和录像直接使用原生内核，保留原始采集尺寸。
 

@@ -1,4 +1,5 @@
 from werkzeug.serving import WSGIRequestHandler
+import pytest
 
 from src.camera_console.config import CameraConsoleConfig
 from src.mvs.sdk import MvsError
@@ -7,6 +8,7 @@ from src.camera_console.web import (
     _camera_console_is_running,
     _schedule_browser_open,
     create_app,
+    run,
 )
 
 
@@ -85,10 +87,31 @@ def test_health_devices_and_config_api():
     assert response.get_json()["config"]["camera"]["ip"] == "192.168.1.20"
 
 
+def test_console_has_one_entry_and_embedded_pages_have_no_version_navigation():
+    client = create_app(service=FakeWebService()).test_client()
+    for path in ("/", "/workbench"):
+        html = client.get(path).get_data(as_text=True)
+        assert '<h1>“贝启者”视觉调试台</h1>' in html
+        assert "扇贝个数实时检测" in html
+        assert "旧版" not in html and "新版" not in html
+        assert client.get(path).headers["X-Frame-Options"] == "DENY"
+    camera = client.get("/camera-settings?embedded=1").get_data(as_text=True)
+    count = client.get("/counter?embedded=1").get_data(as_text=True)
+    for html in (camera, count):
+        assert "<iframe" not in html
+        assert "version-switcher" not in html
+        assert "<h1>" not in html
+        assert "相机与扇贝肉计数工作台" not in html
+        assert "VISION WORKSPACE" not in html
+    assert "counter-sidebar" not in camera
+    assert "左侧调试相机" not in camera
+    assert "传送带监测与单向穿线计数" not in count
+
+
 def test_region_and_shared_output_size_controls_are_next_to_preview():
     app = create_app(service=FakeWebService())
 
-    html = app.test_client().get("/").get_data(as_text=True)
+    html = app.test_client().get("/camera-settings").get_data(as_text=True)
     tools_start = html.index('<aside class="region-tools frame-source-only"')
     tools_end = html.index("</aside>", tools_start)
     tools = html[tools_start:tools_end]
@@ -102,7 +125,7 @@ def test_region_and_shared_output_size_controls_are_next_to_preview():
 def test_camera_source_selector_has_three_peer_sources_and_one_control_set():
     app = create_app(service=FakeWebService())
 
-    html = app.test_client().get("/").get_data(as_text=True)
+    html = app.test_client().get("/camera-settings").get_data(as_text=True)
 
     assert 'id="source-type"' in html
     assert '<option value="mvs">MVS 工业相机</option>' in html
@@ -126,7 +149,7 @@ def test_exposure_and_fps_controls_include_linked_timing_guidance():
     app = create_app(service=FakeWebService())
     client = app.test_client()
 
-    html = client.get("/").get_data(as_text=True)
+    html = client.get("/camera-settings").get_data(as_text=True)
     script = client.get("/static/app.js").get_data(as_text=True)
 
     assert 'id="exposure-timing-advice"' in html
@@ -251,3 +274,30 @@ def test_existing_camera_console_is_detected(monkeypatch):
     )
 
     assert _camera_console_is_running("http://127.0.0.1:8765") is True
+
+
+@pytest.mark.parametrize("already_running", [False, True])
+@pytest.mark.parametrize("open_browser", [True, False])
+def test_launch_opens_unified_console_unless_explicitly_disabled(
+    monkeypatch, already_running, open_browser
+):
+    opened = []
+    served = []
+    monkeypatch.setattr(
+        "src.camera_console.web.CameraConfigStore.load", lambda _: CameraConsoleConfig()
+    )
+    monkeypatch.setattr(
+        "src.camera_console.web._camera_console_is_running", lambda _: already_running
+    )
+    monkeypatch.setattr("src.camera_console.web._schedule_browser_open", opened.append)
+    monkeypatch.setattr("src.camera_console.web.webbrowser.open", opened.append)
+
+    class App:
+        def run(self, **kwargs):
+            served.append(kwargs)
+
+    monkeypatch.setattr("src.camera_console.web.create_app", lambda _: App())
+    run(open_browser=open_browser)
+
+    assert opened == (["http://127.0.0.1:8765"] if open_browser else [])
+    assert len(served) == (0 if already_running else 1)

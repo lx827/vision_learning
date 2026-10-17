@@ -3,26 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>相机采集控制台</title>
+  <title>相机设置</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
   <div class="app">
-    <header class="header">
-      <div>
-        <h1>相机调试</h1>
-        <p>相机连接、画面预览与采集参数设置</p>
-      </div>
-      <div class="connection-status" id="connection-pill">
-        <span class="status-dot"></span>
-        <span id="connection-text">未连接</span>
-      </div>
-    </header>
-
-    <main id="main-content">
+    <main id="main-content" class="workspace-layout">
+      <div class="camera-workspace">
       <section class="panel connection-panel">
         <div class="panel-title">
           <h2>相机连接</h2>
+          <div class="connection-status" id="connection-pill">
+            <span class="status-dot"></span><span id="connection-text">未连接</span>
+          </div>
           <button class="button" id="scan-button" type="button">刷新设备</button>
         </div>
         <div class="form-grid connection-grid">
@@ -243,6 +236,8 @@
 
         </div>
       </div>
+      </div>
+
     </main>
   </div>
 

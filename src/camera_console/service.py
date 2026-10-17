@@ -496,6 +496,21 @@ class FrameCameraService:
                 self._latest_jpeg_capture_wall_ms,
             )
 
+    def latest_image(self, after: int | None = None, timeout: float = 2.0):
+        with self._frame_condition:
+            previous = -1 if after is None else after
+            self._frame_condition.wait_for(
+                lambda: self._capture_sequence > previous
+                or not self._connected
+                or self._last_error,
+                timeout,
+            )
+            if self._last_error:
+                raise MvsError(self._last_error)
+            if not self._connected or self._capture_sequence <= previous or self._latest_frame is None:
+                return None
+            return self._capture_sequence, self._latest_frame.copy()
+
     def status(self) -> dict[str, Any]:
         with self._lock:
             fps = 0.0
