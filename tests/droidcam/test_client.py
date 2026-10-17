@@ -76,7 +76,7 @@ def test_open_reads_frames_requests_format_and_releases_capture():
     parameters = camera.get_parameters()
     camera.close()
 
-    assert device.transport == "MediaFoundation"
+    assert device.transport == "DirectShow"
     assert frame is not None and frame.image.shape == (720, 1280, 3)
     assert capture.settings[cv2.CAP_PROP_FRAME_WIDTH] == 1920
     assert capture.settings[cv2.CAP_PROP_FRAME_HEIGHT] == 1080
