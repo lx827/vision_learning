@@ -99,6 +99,29 @@ class LineCounter:
         return 0 <= fraction <= 1 and 0 <= projection <= 1
 
 
+class RoiCounter:
+    """Count a track immediately when its detected center is inside the ROI."""
+
+    def __init__(self, roi: dict[str, int]) -> None:
+        self.x, self.y, self.width, self.height = (
+            int(roi[key]) for key in ("x", "y", "width", "height")
+        )
+        if min(self.x, self.y) < 0 or min(self.width, self.height) <= 0:
+            raise ValueError("ROI 参数无效")
+        self.count = 0
+        self.counted_ids: set[int] = set()
+
+    def update(self, track_id: int, point: tuple[float, float]) -> bool:
+        x, y = point
+        if (track_id not in self.counted_ids
+                and self.x <= x < self.x + self.width
+                and self.y <= y < self.y + self.height):
+            self.counted_ids.add(track_id)
+            self.count += 1
+            return True
+        return False
+
+
 def detection_center(box: Iterable[float]) -> tuple[float, float]:
     x1, y1, x2, y2 = (float(value) for value in box)
     return (x1 + x2) / 2, (y1 + y2) / 2

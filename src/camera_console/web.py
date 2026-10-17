@@ -148,6 +148,10 @@ def create_app(
     def count_start():
         return _ok(status=counting.start(_json_body(required=False)))
 
+    @app.post("/api/count/prepare")
+    def count_prepare():
+        return _ok(status=counting.prepare())
+
     @app.post("/api/count/stop")
     def count_stop():
         return _ok(status=counting.stop())

@@ -25,8 +25,13 @@ class FakeTensor:
         return self.values
 
 
+class FakeBoxes(SimpleNamespace):
+    def __len__(self):
+        return len(self.conf.values)
+
+
 @pytest.fixture
-def worker(tmp_path, monkeypatch):
+def worker(tmp_path, monkeypatch, request):
     frames = queue.Queue()
     inference_entered = threading.Event()
     inference_release = threading.Event()
@@ -54,12 +59,16 @@ def worker(tmp_path, monkeypatch):
                 return None
 
     class Model:
+        def __init__(self):
+            self.shapes = []
+
         def track(self, frame, **kwargs):
+            self.shapes.append(frame.shape)
             inference_entered.set()
             assert inference_release.wait(3), "inference was not released"
             track_id, center_x = (int(v) for v in frame[0, 0, :2])
-            boxes = SimpleNamespace(
-                id=FakeTensor([track_id]),
+            boxes = FakeBoxes(
+                id=FakeTensor([track_id]) if track_id != 255 else None,
                 xyxy=FakeTensor([[center_x - 3, 27, center_x + 3, 33]]),
                 conf=FakeTensor([0.9]),
             )
@@ -67,6 +76,7 @@ def worker(tmp_path, monkeypatch):
 
     monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=lambda _: Model()))
     service = CountingService(lambda: Camera(), config)
+    service._config.update(getattr(request, "param", {}))
     service.start()
 
     def send(track_id, center_x, sequence, *, wait=True):
@@ -129,3 +139,87 @@ def test_reset_discards_previous_preview_without_rewinding_sequence(worker):
     service.reset()
     assert service.status["frame_sequence"] == sequence
     assert service.wait_for_frame(sequence, timeout=0)[1] is None
+
+
+@pytest.mark.parametrize("worker", [{
+    "count_mode": "roi", "roi": {"x": 40, "y": 10, "width": 40, "height": 50},
+    "min_track_frames": 99,
+}], indirect=True)
+def test_roi_worker_counts_on_first_tracked_center_and_reset_keeps_ids(worker):
+    service, send, _, _ = worker
+    send(1, 30, 1)
+    assert service.status["count"] == 0
+    send(1, 50, 2)
+    assert service.status["count"] == 1
+    send(1, 60, 3)
+    assert service.status["count"] == 1
+    service.reset()
+    send(1, 65, 4)
+    assert service.status["count"] == 0
+    send(2, 50, 5)
+    assert service.status["count"] == 1
+    assert service._model.shapes[-1] == (100, 100, 3)
+
+
+def test_restart_reuses_model_but_starts_new_counting_session(worker):
+    service, send, _, _ = worker
+    send(1, 20, 1)
+    send(1, 60, 2)
+    assert service.status["count"] == 1
+    model = service._model
+    service.stop()
+    service.start()
+    send(2, 20, 3)
+    assert service._model is model
+    assert service.status["count"] == 0
+    send(2, 60, 4)
+    assert service.status["count"] == 1
+
+
+@pytest.mark.parametrize("worker", [{"count_mode": "roi"}], indirect=True)
+def test_untracked_detection_is_visible_but_not_counted(worker):
+    service, send, _, _ = worker
+    send(255, 50, 1)
+    assert service.status["detections"] == 1
+    assert service.status["count"] == 0
+    send(1, 50, 2)
+    assert service.status["count"] == 1
+
+
+def test_prepare_is_nonblocking_and_does_not_touch_camera(tmp_path, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    loads = []
+
+    class Model:
+        def track(self, frame, **kwargs):
+            entered.set()
+            assert release.wait(3)
+
+    def load(weights):
+        loads.append(weights)
+        return Model()
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=load))
+    weights = tmp_path / "fake.pt"
+    weights.touch()
+    config = tmp_path / "count.yaml"
+    config.write_text(f"model:\n  weights: {weights.as_posix()}\n", encoding="utf-8")
+
+    def forbidden_camera():
+        pytest.fail("Warmup must not acquire the camera")
+
+    service = CountingService(forbidden_camera, config)
+    try:
+        assert service.prepare()["active"] is False
+        assert entered.wait(3)
+        assert service.status["preparing"] is True
+        service.prepare()
+        release.set()
+        service._prepare_thread.join(3)
+        service.prepare()
+        service._prepare_thread.join(3)
+        assert len(loads) == 1
+        assert service.status["model_ready"] is True
+    finally:
+        release.set()
+        service.stop()

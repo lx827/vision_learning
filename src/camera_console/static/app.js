@@ -382,6 +382,7 @@ async function connectOrDisconnect() {
   const payload = await api("/api/camera/connect", { method: "POST" });
   updateStatus(payload.status);
   startPreview();
+  if (isFrameSource()) api("/api/count/prepare", { method: "POST" }).catch(() => {});
   if (isFrameSource()) await loadParameters();
   const deviceDetail = payload.status.device.ip || payload.status.device.user_name || payload.status.device.serial;
   logEvent(`已连接 ${payload.status.device.model}（${deviceDetail}）。`);
@@ -1239,6 +1240,7 @@ function bindEvents() {
     if (state.status.connected) logEvent("实时预览中断，正在等待重新连接。", true);
   });
   elements.preview.addEventListener("load", renderRegions);
+  elements.viewport.addEventListener("previewresize", renderRegions);
   window.addEventListener("resize", renderRegions);
   window.addEventListener("pagehide", () => {
     if (!state.status.connected) return;
@@ -1257,6 +1259,7 @@ async function initialize() {
     updateStatus(statusPayload.status);
     if (statusPayload.status.connected) {
       startPreview();
+      if (isFrameSource()) api("/api/count/prepare", { method: "POST" }).catch(() => {});
       if (isFrameSource()) await loadParameters();
     }
     await withBusy($("scan-button"), scanDevices);

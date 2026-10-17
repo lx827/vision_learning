@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import yaml
 
-from src.scallop_counter import LineCounter, detection_center
+from src.scallop_counter import LineCounter, RoiCounter, detection_center
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -34,6 +34,11 @@ class CountingService:
         self._fps = 0.0
         self._error = ""
         self._starting = False
+        self._model_lock = threading.Lock()
+        self._model = None
+        self._model_key = None
+        self._prepare_thread: threading.Thread | None = None
+        self._prepare_error = ""
         self._config = self._load_defaults()
 
     def _load_defaults(self) -> dict[str, Any]:
@@ -43,6 +48,7 @@ class CountingService:
         roi = data.get("roi", {})
         line = data.get("count_line", {})
         return {
+            "count_mode": str(data.get("counting", {}).get("mode", "line")),
             "weights": str(model.get("weights", "")),
             "imgsz": int(model.get("imgsz", 960)),
             "conf": float(model.get("conf", 0.10)),
@@ -68,6 +74,10 @@ class CountingService:
             return {
                 "active": self._thread is not None and self._thread.is_alive(),
                 "starting": self._starting,
+                "stopping": self._stop.is_set() and self._thread is not None and self._thread.is_alive(),
+                "preparing": self._prepare_thread is not None and self._prepare_thread.is_alive(),
+                "model_ready": self._model is not None,
+                "prepare_error": self._prepare_error,
                 "count": self._count,
                 "detections": self._detections,
                 "fps": round(self._fps, 1),
@@ -81,7 +91,7 @@ class CountingService:
             if self._thread and self._thread.is_alive():
                 return self.status
             config = dict(self._config)
-            for key in ("weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
+            for key in ("count_mode", "weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
                 if overrides and key in overrides:
                     config[key] = overrides[key]
             if overrides and isinstance(overrides.get("roi"), dict):
@@ -90,6 +100,10 @@ class CountingService:
             self._config = config
             self._error = ""
             self._starting = True
+            self._count = 0
+            self._latest_jpeg = None
+            self._detections = 0
+            self._fps = 0.0
             self._stop.clear()
             self._thread = threading.Thread(target=self._run, args=(config,), name="scallop-counting", daemon=True)
             self._thread.start()
@@ -101,8 +115,9 @@ class CountingService:
         if worker and worker is not threading.current_thread():
             worker.join(timeout=4)
         with self._lock:
-            self._thread = None
-            self._starting = False
+            if worker is None or not worker.is_alive():
+                self._thread = None
+                self._starting = False
             self._condition.notify_all()
             return self.status
 
@@ -121,6 +136,8 @@ class CountingService:
 
     @staticmethod
     def _validate(config: dict[str, Any]) -> None:
+        if config["count_mode"] not in {"line", "roi"}:
+            raise ValueError("计数方式必须是过线计数或 ROI 计数")
         weights = Path(str(config["weights"])).expanduser()
         if not weights.is_absolute():
             weights = PROJECT_ROOT / weights
@@ -133,32 +150,85 @@ class CountingService:
         roi = config["roi"]
         if any(int(roi[k]) < 0 for k in ("x", "y")) or any(int(roi[k]) <= 0 for k in ("width", "height")):
             raise ValueError("ROI 参数无效")
-        LineCounter(
-            (tuple(config["line_start"]), tuple(config["line_end"])),
-            direction=str(config["direction"]),
-            min_track_frames=int(config["min_track_frames"]),
-            deadband_px=float(config["deadband_px"]),
-        )
+        if config["count_mode"] == "line":
+            LineCounter(
+                (tuple(config["line_start"]), tuple(config["line_end"])),
+                direction=str(config["direction"]),
+                min_track_frames=int(config["min_track_frames"]),
+                deadband_px=float(config["deadband_px"]),
+            )
 
-    def _run(self, config: dict[str, Any]) -> None:
-        try:
+    @staticmethod
+    def _track_options(config: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "persist": True, "tracker": config["tracker"],
+            "imgsz": int(config["imgsz"]), "conf": float(config["conf"]),
+            "iou": float(config["iou"]), "device": config["device"],
+            "classes": [0], "verbose": False,
+        }
+
+    @staticmethod
+    def _reset_tracker(model) -> None:
+        for tracker in getattr(getattr(model, "predictor", None), "trackers", []):
+            tracker.reset()
+
+    def _get_model(self, config: dict[str, Any]):
+        """Prepare once; the worker and warmup thread never use a model concurrently."""
+        key = tuple(str(config[name]) for name in ("weights", "device", "imgsz", "tracker"))
+        with self._model_lock:
+            if self._model is not None and self._model_key == key:
+                return self._model
             from ultralytics import YOLO
 
             weights = Path(str(config["weights"])).expanduser()
             if not weights.is_absolute():
                 weights = PROJECT_ROOT / weights
             model = YOLO(str(weights))
-            counter = LineCounter(
+            roi = config["roi"]
+            # Warm up CUDA, inference, and tracking using a synthetic image only.
+            height = min(int(roi["height"]), int(config["imgsz"]))
+            width = min(int(roi["width"]), int(config["imgsz"]))
+            model.track(np.zeros((height, width, 3), dtype=np.uint8), **self._track_options(config))
+            self._reset_tracker(model)
+            self._model = model
+            self._model_key = key
+            return model
+
+    def prepare(self) -> dict[str, Any]:
+        """Warm the configured model without connecting or consuming camera frames."""
+        with self._lock:
+            if self.status["active"] or self.status["preparing"]:
+                return self.status
+            config = dict(self._config)
+            self._validate(config)
+            self._prepare_error = ""
+
+            def warmup():
+                try:
+                    self._get_model(config)
+                except Exception as exc:
+                    with self._lock:
+                        self._prepare_error = str(exc)
+
+            self._prepare_thread = threading.Thread(target=warmup, name="scallop-model-warmup", daemon=True)
+            self._prepare_thread.start()
+            return self.status
+
+    def _run(self, config: dict[str, Any]) -> None:
+        try:
+            camera = self._camera_provider()
+            if not camera.status().get("connected"):
+                camera.connect()
+            model = self._get_model(config)
+            if self._stop.is_set():
+                return
+            self._reset_tracker(model)
+            counter = RoiCounter(config["roi"]) if config["count_mode"] == "roi" else LineCounter(
                 (tuple(config["line_start"]), tuple(config["line_end"])),
                 direction=str(config["direction"]),
                 min_track_frames=int(config["min_track_frames"]),
                 deadband_px=float(config["deadband_px"]),
             )
-            with self._lock:
-                self._starting = False
-            camera = self._camera_provider()
-            if not camera.status().get("connected"):
-                camera.connect()
             times: list[float] = []
             sequence = -1
             reset_generation = -1
@@ -174,31 +244,32 @@ class CountingService:
                         reset_generation = self._reset_generation
                 roi = config["roi"]
                 x, y, width, height = (int(roi[k]) for k in ("x", "y", "width", "height"))
-                crop = frame[y : y + height, x : x + width]
-                result = model.track(
-                    crop,
-                    persist=True,
-                    tracker=config["tracker"],
-                    imgsz=int(config["imgsz"]),
-                    conf=float(config["conf"]),
-                    iou=float(config["iou"]),
-                    device=config["device"],
-                    classes=[0],
-                    verbose=False,
-                )[0]
+                frame_height, frame_width = frame.shape[:2]
+                if x + width > frame_width or y + height > frame_height:
+                    raise ValueError(f"ROI 超出当前画面 {frame_width} × {frame_height}，请重新框选")
+                # ROI mode tracks the full frame so boxes are not truncated at ROI edges.
+                is_roi = config["count_mode"] == "roi"
+                crop = frame if is_roi else frame[y : y + height, x : x + width]
+                result = model.track(crop, **self._track_options(config))[0]
                 boxes = result.boxes
                 ids = boxes.id.int().cpu().tolist() if boxes is not None and boxes.id is not None else [None] * (len(boxes) if boxes is not None else 0)
                 annotated = frame.copy()
                 cv2.rectangle(annotated, (x, y), (x + width, y + height), (48, 190, 220), 2)
-                cv2.line(annotated, tuple(config["line_start"]), tuple(config["line_end"]), (0, 80, 255), 3)
+                if not is_roi:
+                    cv2.line(annotated, tuple(config["line_start"]), tuple(config["line_end"]), (0, 80, 255), 3)
                 current = 0
-                for box, confidence, track_id in zip(boxes.xyxy.cpu().tolist(), boxes.conf.cpu().tolist(), ids):
+                for box, confidence, track_id in zip(
+                    boxes.xyxy.cpu().tolist() if boxes is not None else [],
+                    boxes.conf.cpu().tolist() if boxes is not None else [], ids,
+                ):
                     x1, y1, x2, y2 = [int(value) for value in box]
-                    full_box = (x1 + x, y1 + y, x2 + x, y2 + y)
+                    offset_x, offset_y = (0, 0) if is_roi else (x, y)
+                    full_box = (x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y)
                     center = detection_center(full_box)
                     if track_id is not None:
                         counter.update(int(track_id), center)
-                    current += 1
+                    if not is_roi or x <= center[0] < x + width and y <= center[1] < y + height:
+                        current += 1
                     color = (35, 220, 80) if track_id not in counter.counted_ids else (0, 190, 255)
                     cv2.rectangle(annotated, (full_box[0], full_box[1]), (full_box[2], full_box[3]), color, 2)
                     label = f"ID {track_id if track_id is not None else '-'}  {float(confidence):.2f}"
@@ -220,11 +291,16 @@ class CountingService:
                     self._sequence = sequence
                     self._latest_jpeg = encoded.tobytes()
                     self._count = counter.count
+                    self._starting = False
                     self._detections = current
                     self._fps = fps
                     self._condition.notify_all()
         except Exception as exc:
             with self._condition:
                 self._error = str(exc)
+                self._starting = False
+                self._condition.notify_all()
+        finally:
+            with self._condition:
                 self._starting = False
                 self._condition.notify_all()
