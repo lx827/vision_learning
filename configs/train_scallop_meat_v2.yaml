@@ -1,0 +1,48 @@
+# 仿真扇贝肉单类别检测 v2：从 v1 扇贝模型继续微调，数据使用 20261018 采集。
+# 在仓库根目录运行 src/trainer.py，并通过 --config 指定本文件。
+model:
+  name: weights/scallop_meat/scallop_meat_v1_20261005_best.pt
+
+data:
+  name: scallop_meat_v2.yaml
+
+train:
+  epochs: 100
+  batch: 8                 # RTX 4060 Laptop 8GB 的起步设置，尚未实测训练显存
+  imgsz: 640
+  device: 0
+  workers: 2               # Windows 下减少数据加载进程数
+  pretrained: true
+  freeze: null             # 整个网络参与微调
+  optimizer: AdamW
+  lr0: 0.001               # 与上次一致；从已收敛权重继续微调时可考虑降低
+  lrf: 0.01
+  weight_decay: 0.0005
+  warmup_epochs: 3.0
+  cos_lr: true
+  seed: 42
+  deterministic: true
+  val: true
+  save: true
+  save_period: -1
+  project: train
+  name: null               # 自动命名：scallop_meat_v2_<权重名>_e100_日期
+  exist_ok: false
+  cache: false
+  amp: true
+  close_mosaic: 10
+  resume: false
+
+augment:
+  hsv_h: 0.015
+  hsv_s: 0.2
+  hsv_v: 0.2
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.2
+  shear: 0.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.5
+  mosaic: 0.3
+  mixup: 0.0

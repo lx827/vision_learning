@@ -1,0 +1,7 @@
+# Local scallop meat detection dataset v2; simulated targets on brush rollers.
+# Source: data/camera/pictures/20261018 (2026-10-18), only non-empty annotations.
+path: E:/A-codehub/vision_learning/data/scallop_meat_v2
+train: train/images
+val: valid/images
+names:
+  0: scallop_meat
