@@ -5,7 +5,8 @@ counting:
   mode: line  # line: original directional crossing; roi: first tracked center inside ROI
 
 model:
-  weights: runs/detect/train/scallop_meat_yolov8s_e100_20260916/weights/best.pt
+  directory: weights/scallop_meat  # 网页从此目录列出可选的 .pt 权重
+  weights: weights/scallop_meat/scallop_meat_v1_20261005_best.pt
   imgsz: 960
   conf: 0.10
   iou: 0.45

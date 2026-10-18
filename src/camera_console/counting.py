@@ -44,6 +44,7 @@ class CountingService:
     def _load_defaults(self) -> dict[str, Any]:
         data = yaml.safe_load(self._config_path.read_text(encoding="utf-8")) or {}
         model = data.get("model", {})
+        self._model_directory = self._weights_path(model.get("directory", "weights/scallop_meat"))
         tracking = data.get("tracking", {})
         roi = data.get("roi", {})
         line = data.get("count_line", {})
@@ -68,6 +69,35 @@ class CountingService:
             "deadband_px": float(line.get("deadband_px", 4)),
         }
 
+    @staticmethod
+    def _weights_path(weights: str | Path) -> Path:
+        path = Path(weights).expanduser()
+        return (path if path.is_absolute() else PROJECT_ROOT / path).resolve()
+
+    @staticmethod
+    def _model_cache_key(config: dict[str, Any]) -> tuple[str, ...]:
+        return tuple(str(config[name]) for name in ("weights", "device", "imgsz", "tracker"))
+
+    def available_models(self) -> dict[str, Any]:
+        """枚举固定目录的权重，并兼容配置中已有的目录外权重。"""
+        with self._lock:
+            selected = self._config["weights"]
+        paths = set(self._model_directory.rglob("*.pt"))
+        current = self._weights_path(selected)
+        if current.is_file() and current.suffix.lower() == ".pt":
+            paths.add(current)
+        models = []
+        for path in sorted(paths):
+            if not path.is_file():
+                continue
+            path = path.resolve()
+            reference = path.relative_to(PROJECT_ROOT).as_posix() if path.is_relative_to(PROJECT_ROOT) else path.as_posix()
+            if path == current:
+                reference = selected
+            name = path.relative_to(self._model_directory).as_posix() if path.is_relative_to(self._model_directory) else reference
+            models.append({"path": reference, "name": name, "size_bytes": path.stat().st_size})
+        return {"directory": str(self._model_directory), "models": models, "selected": selected}
+
     @property
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -76,7 +106,7 @@ class CountingService:
                 "starting": self._starting,
                 "stopping": self._stop.is_set() and self._thread is not None and self._thread.is_alive(),
                 "preparing": self._prepare_thread is not None and self._prepare_thread.is_alive(),
-                "model_ready": self._model is not None,
+                "model_ready": self._model is not None and self._model_key == self._model_cache_key(self._config),
                 "prepare_error": self._prepare_error,
                 "count": self._count,
                 "detections": self._detections,
@@ -174,7 +204,7 @@ class CountingService:
 
     def _get_model(self, config: dict[str, Any]):
         """Prepare once; the worker and warmup thread never use a model concurrently."""
-        key = tuple(str(config[name]) for name in ("weights", "device", "imgsz", "tracker"))
+        key = self._model_cache_key(config)
         with self._model_lock:
             if self._model is not None and self._model_key == key:
                 return self._model
@@ -194,13 +224,22 @@ class CountingService:
             self._model_key = key
             return model
 
-    def prepare(self) -> dict[str, Any]:
-        """Warm the configured model without connecting or consuming camera frames."""
+    def prepare(self, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+        """选择并预热本次会话的权重，不连接相机或消耗相机帧。"""
         with self._lock:
-            if self.status["active"] or self.status["preparing"]:
-                return self.status
             config = dict(self._config)
+            if overrides and "weights" in overrides:
+                weights = overrides["weights"]
+                if not isinstance(weights, str) or Path(weights).suffix.lower() != ".pt":
+                    raise ValueError("请选择有效的 .pt 模型权重")
+                config["weights"] = weights
+            changed = config["weights"] != self._config["weights"]
+            if self.status["active"] or self.status["preparing"]:
+                if changed:
+                    raise ValueError("请等待模型预热完成并停止监测后再切换权重")
+                return self.status
             self._validate(config)
+            self._config = config
             self._prepare_error = ""
 
             def warmup():

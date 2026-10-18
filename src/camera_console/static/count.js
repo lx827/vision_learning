@@ -3,6 +3,7 @@ const state = {
   active: false, starting: false, connected: false, initialized: false,
   sourceWidth: 0, sourceHeight: 0, cameraSequence: -1, countSequence: -1,
   objectUrl: "", drawing: false, drag: null, disposed: false,
+  status: null, models: [], modelsLoaded: false, modelBusy: false, modelError: "",
 };
 
 async function api(path, options = {}) {
@@ -18,12 +19,72 @@ function roi() {
 }
 function payload() {
   return {
+    weights: $("weights-select").value,
     count_mode: $("count-mode").value, conf: value("conf-input"), imgsz: value("imgsz-input"),
     roi: roi(), direction: $("direction-input").value,
     line_start: [value("line-x"), 0],
     line_end: [value("line-x"), state.sourceHeight || roi().y + roi().height],
     deadband_px: value("deadband-input"),
   };
+}
+
+function syncModelControls() {
+  const locked = state.active || state.starting || state.modelBusy;
+  $("weights-select").disabled = locked || state.status?.preparing || !state.modelsLoaded;
+  $("refresh-models-button").disabled = locked || state.status?.preparing;
+  $("start-button").disabled = locked || !state.initialized || !state.modelsLoaded
+    || !state.models.some((model) => model.path === $("weights-select").value);
+}
+
+function selectConfiguredWeights(weights) {
+  const select = $("weights-select");
+  if (![...select.options].some((option) => option.value === weights)) {
+    select.add(new Option(`${weights}（未在目录中找到）`, weights));
+  }
+  select.value = weights;
+}
+
+async function loadModels() {
+  state.modelBusy = true;
+  $("refresh-models-button").setAttribute("aria-busy", "true");
+  syncModelControls();
+  try {
+    const catalog = await api("/api/count/models");
+    state.models = catalog.models;
+    $("weights-select").replaceChildren(...catalog.models.map((model) => new Option(model.name, model.path)));
+    selectConfiguredWeights(catalog.selected);
+    $("model-directory").textContent = `模型目录：${catalog.directory}`;
+    state.modelsLoaded = true;
+    state.modelError = catalog.models.length ? "" : "模型目录中没有可用权重，请放入 .pt 文件后刷新。";
+    showError(state.modelError);
+  } catch (error) {
+    state.modelError = `读取权重列表失败：${error.message}`;
+    showError(state.modelError);
+  } finally {
+    state.modelBusy = false;
+    $("refresh-models-button").removeAttribute("aria-busy");
+    syncModelControls();
+  }
+}
+
+async function changeModel() {
+  state.modelBusy = true;
+  syncModelControls();
+  $("model-state").textContent = "正在切换模型…";
+  try {
+    const { status } = await api("/api/count/prepare", {
+      method: "POST", body: JSON.stringify({ weights: $("weights-select").value }),
+    });
+    state.modelError = "";
+    render(status);
+  } catch (error) {
+    state.modelError = `切换模型失败：${error.message}`;
+    if (state.status?.config) selectConfiguredWeights(state.status.config.weights);
+    showError(state.modelError);
+  } finally {
+    state.modelBusy = false;
+    syncModelControls();
+  }
 }
 
 function showError(error) {
@@ -41,8 +102,10 @@ function updateRule() {
 }
 
 function render(status) {
+  state.status = status;
   state.active = status.active;
   state.starting = status.starting;
+  if (!state.modelBusy && status.config) selectConfiguredWeights(status.config.weights);
   if (!state.initialized && status.config) {
     const config = status.config;
     $("conf-input").value = config.conf;
@@ -62,16 +125,17 @@ function render(status) {
     : status.starting ? "正在准备模型，先显示相机预览"
     : status.active ? "正在实时监测" : status.error ? "检测失败" : "相机预览 / 未开始监测";
   $("live-dot").classList.toggle("active", status.active && !status.starting);
-  $("start-button").disabled = !state.initialized || status.active || status.starting;
   $("stop-button").disabled = !status.active && !status.starting;
   $("detection-settings").disabled = status.active || status.starting;
   $("count-settings").disabled = status.active || status.starting;
   $("draw-roi-button").disabled = !state.connected || !state.sourceWidth;
   $("full-roi-button").disabled = !state.connected || !state.sourceWidth;
-  $("model-state").textContent = status.preparing ? "模型正在后台预热，可先预览和框选 ROI。"
+  const modelName = status.config?.weights?.split(/[\\/]/).pop() || "";
+  $("model-state").textContent = status.preparing ? `正在预热 ${modelName}，可先预览和框选 ROI。`
     : status.prepare_error ? `预热未完成：${status.prepare_error}；开始监测时会重试。`
-    : status.model_ready ? "模型已准备好。" : "首次监测需准备模型；准备期间可查看相机预览。";
-  showError(status.error || "");
+    : status.model_ready ? `模型已准备好：${modelName}` : "首次监测需准备模型；准备期间可查看相机预览。";
+  syncModelControls();
+  showError(status.error || state.modelError);
 }
 
 async function refresh() {
@@ -232,13 +296,18 @@ $("full-roi-button").addEventListener("click", () => {
 });
 for (const key of ["x", "y", "width", "height"]) $("roi-" + key).addEventListener("input", renderRoi);
 $("count-mode").addEventListener("change", updateRule);
+$("weights-select").addEventListener("change", changeModel);
+$("refresh-models-button").addEventListener("click", loadModels);
 $("count-surface").addEventListener("previewresize", renderRoi);
 $("count-frame").addEventListener("load", renderRoi);
 for (const [id, action] of [["start-button", start], ["stop-button", stop], ["reset-button", reset]]) {
   $(id).addEventListener("click", async () => {
     $(id).disabled = true;
     try { await action(); } catch (error) { showError(error.message); }
-    finally { $(id).disabled = id === "start-button" ? state.active : id === "stop-button" ? !state.active : false; }
+    finally {
+      $(id).disabled = id === "stop-button" ? !state.active : false;
+      syncModelControls();
+    }
   });
 }
 window.addEventListener("keydown", (event) => { if (event.key === "Escape") cancelDrawing(true); });
@@ -247,6 +316,7 @@ window.addEventListener("pagehide", () => {
   if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
 });
 refresh().catch((error) => showError(error.message));
+loadModels();
 api("/api/count/prepare", { method: "POST" }).catch((error) => { $("model-state").textContent = error.message; });
 setInterval(() => refresh().catch((error) => showError(error.message)), 800);
 previewLoop();

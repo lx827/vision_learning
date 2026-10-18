@@ -149,13 +149,17 @@ def create_app(
     def count_status():
         return _ok(status=counting.status)
 
+    @app.get("/api/count/models")
+    def count_models():
+        return _ok(**counting.available_models())
+
     @app.post("/api/count/start")
     def count_start():
         return _ok(status=counting.start(_json_body(required=False)))
 
     @app.post("/api/count/prepare")
     def count_prepare():
-        return _ok(status=counting.prepare())
+        return _ok(status=counting.prepare(_json_body(required=False)))
 
     @app.post("/api/count/stop")
     def count_stop():

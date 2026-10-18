@@ -37,3 +37,6 @@ fieldset.control-panel { min-width:0; margin:0; }
 .field-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 input,select { min-width:0; }
 body { min-width:0; }
+.model-selection { display:grid; gap:8px; margin-bottom:16px; }
+.model-selection .field-help { margin-top:0; overflow-wrap:anywhere; }
+#weights-select { max-width:100%; }

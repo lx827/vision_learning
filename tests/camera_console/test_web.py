@@ -125,6 +125,28 @@ def test_console_has_one_entry_and_embedded_pages_have_no_version_navigation():
     assert "传送带监测与单向穿线计数" not in count
 
 
+def test_count_model_catalog_and_selection_api(tmp_path, monkeypatch):
+    app = create_app(service=FakeWebService())
+    counting = app.config["COUNTING_SERVICE"]
+    weights = tmp_path / "selected.pt"
+    weights.write_bytes(b"model")
+    counting._model_directory = tmp_path
+    counting._config["weights"] = weights.as_posix()
+    client = app.test_client()
+    catalog = client.get("/api/count/models").get_json()
+    assert catalog["ok"] is True
+    assert catalog["models"] == [{
+        "path": weights.as_posix(), "name": "selected.pt", "size_bytes": 5,
+    }]
+    assert catalog["selected"] == weights.as_posix()
+    received = []
+    monkeypatch.setattr(counting, "prepare", lambda overrides: received.append(overrides) or counting.status)
+    assert client.post("/api/count/prepare", json={"weights": weights.as_posix()}).status_code == 200
+    assert received == [{"weights": weights.as_posix()}]
+    assert client.post("/api/count/prepare").status_code == 200
+    assert received[-1] == {}
+
+
 def test_region_and_shared_output_size_controls_are_next_to_preview():
     app = create_app(service=FakeWebService())
 

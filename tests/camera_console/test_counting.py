@@ -3,12 +3,41 @@
 import queue
 import sys
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from src.camera_console.counting import CountingService
+
+
+def test_model_catalog_lists_pt_files_and_keeps_configured_external_weight(tmp_path):
+    directory = tmp_path / "models"
+    directory.mkdir()
+    (directory / "first.pt").write_bytes(b"first")
+    (directory / "nested").mkdir()
+    (directory / "nested" / "second.pt").write_bytes(b"second")
+    (directory / "notes.txt").write_text("not a model", encoding="utf-8")
+    external = tmp_path / "configured.pt"
+    external.write_bytes(b"configured")
+    config = tmp_path / "count.yaml"
+    config.write_text(
+        f"model:\n  directory: {directory.as_posix()}\n  weights: {external.as_posix()}\n",
+        encoding="utf-8",
+    )
+    service = CountingService(lambda: pytest.fail("枚举权重不应访问相机"), config)
+    catalog = service.available_models()
+    assert catalog["directory"] == str(directory.resolve())
+    assert catalog["selected"] == external.as_posix()
+    assert catalog["selected"] in {model["path"] for model in catalog["models"]}
+    assert {(Path.cwd() / model["path"]).resolve() for model in catalog["models"]} == {
+        external, directory / "first.pt", directory / "nested" / "second.pt",
+    }
+    assert all(model["size_bytes"] > 0 for model in catalog["models"])
+    # 刷新时重新扫描，新增权重无需重启网页服务。
+    (directory / "added.pt").touch()
+    assert len(service.available_models()["models"]) == 4
 
 
 class FakeTensor:
@@ -74,7 +103,12 @@ def worker(tmp_path, monkeypatch, request):
             )
             return [SimpleNamespace(boxes=boxes)]
 
-    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=lambda _: Model()))
+    def load(weights):
+        model = Model()
+        model.weights = weights
+        return model
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=load))
     service = CountingService(lambda: Camera(), config)
     service._config.update(getattr(request, "param", {}))
     service.start()
@@ -174,6 +208,90 @@ def test_restart_reuses_model_but_starts_new_counting_session(worker):
     assert service.status["count"] == 0
     send(2, 60, 4)
     assert service.status["count"] == 1
+
+
+def test_cannot_switch_model_while_counting(worker, tmp_path):
+    service, send, _, _ = worker
+    send(1, 20, 1)
+    previous = service.status["config"]["weights"]
+    other = tmp_path / "other.pt"
+    other.touch()
+    with pytest.raises(ValueError, match="停止监测"):
+        service.prepare({"weights": other.as_posix()})
+    assert service.status["config"]["weights"] == previous
+
+
+def test_selected_weights_are_used_by_next_counting_session(worker, tmp_path):
+    service, send, _, _ = worker
+    send(1, 20, 1)
+    previous_model = service._model
+    service.stop()
+    selected = tmp_path / "selected.pt"
+    selected.touch()
+    service.prepare({"weights": selected.as_posix()})
+    service._prepare_thread.join(3)
+    assert service.status["model_ready"] is True
+    service.start({"weights": selected.as_posix()})
+    send(2, 20, 2)
+    send(2, 60, 3)
+    assert service._model.weights == str(selected)
+    assert service._model is not previous_model
+    assert service.status["count"] == 1
+
+
+def test_switch_prepares_selected_weights_and_does_not_report_old_model_ready(tmp_path, monkeypatch):
+    entered, release = threading.Event(), threading.Event()
+    loads = []
+
+    class Model:
+        def track(self, frame, **kwargs):
+            if len(loads) == 2:
+                entered.set()
+                assert release.wait(3)
+
+    def load(weights):
+        loads.append(weights)
+        return Model()
+
+    monkeypatch.setitem(sys.modules, "ultralytics", SimpleNamespace(YOLO=load))
+    first, second = tmp_path / "first.pt", tmp_path / "second.pt"
+    first.touch()
+    second.touch()
+    config = tmp_path / "count.yaml"
+    text = f"model:\n  weights: {first.as_posix()}\n"
+    config.write_text(text, encoding="utf-8")
+    service = CountingService(lambda: pytest.fail("预热不应访问相机"), config)
+    try:
+        service.prepare()
+        service._prepare_thread.join(3)
+        assert service.status["model_ready"] is True
+        original_model = service._model
+        service.prepare({"weights": second.as_posix()})
+        assert entered.wait(3)
+        assert service.status["config"]["weights"] == second.as_posix()
+        assert service.status["preparing"] is True
+        assert service.status["model_ready"] is False
+        with pytest.raises(ValueError, match="预热完成"):
+            service.prepare({"weights": first.as_posix()})
+        release.set()
+        service._prepare_thread.join(3)
+        assert service.status["model_ready"] is True
+        assert service._model is not original_model
+        assert loads == [str(first), str(second)]
+        service.prepare()
+        service._prepare_thread.join(3)
+        assert len(loads) == 2
+        assert config.read_text(encoding="utf-8") == text
+        with pytest.raises(ValueError, match="找不到模型权重"):
+            service.prepare({"weights": (tmp_path / "missing.pt").as_posix()})
+        with pytest.raises(ValueError, match=".pt"):
+            service.prepare({"weights": str(tmp_path / "notes.txt")})
+        assert service.status["config"]["weights"] == second.as_posix()
+    finally:
+        release.set()
+        if service._prepare_thread:
+            service._prepare_thread.join(3)
+        service.stop()
 
 
 @pytest.mark.parametrize("worker", [{"count_mode": "roi"}], indirect=True)
