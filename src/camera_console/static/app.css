@@ -36,6 +36,11 @@ h2 { font-size: 15px; }
 main { display: flex; flex-direction: column; gap: 16px; }
 .workspace-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
 .camera-workspace { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+/* 预览与成像参数并排，调参列表独立滚动，避免来回翻页。 */
+.camera-tuning-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 16px; }
+.camera-tuning-grid > .panel { min-width: 0; }
+.camera-tuning-grid .stage { position: sticky; top: 12px; }
+.camera-tuning-grid .imaging-panel { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
 .panel { padding: 14px 16px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
 .panel-title, .preview-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .panel h2 { margin-bottom: 12px; }
@@ -45,8 +50,8 @@ main { display: flex; flex-direction: column; gap: 16px; }
 .connection-grid { grid-template-columns: minmax(220px, 2fr) 1fr 1fr; margin-top: 12px; }
 .obs-mode .connection-grid { grid-template-columns: 1fr 2fr; }
 .obs-mode .preview-workspace { grid-template-columns: 1fr; }
+.obs-mode .camera-tuning-grid { grid-template-columns: 1fr; }
 .obs-mode .section-grid { grid-template-columns: 1fr; }
-.obs-mode .section-grid > .column:last-child { display: none; }
 .uvc-mode .connection-grid { grid-template-columns: 1fr 2fr; }
 .uvc-mode .output-size-tools { margin-top: 0; padding-top: 0; border-top: 0; }
 .sdk-field { grid-column: span 2; }
@@ -78,12 +83,12 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .button[aria-busy="true"] { cursor: wait; }
 
 .stage { padding: 0; overflow: hidden; }
-.preview-header { min-height: 55px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.preview-header { min-height: 55px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .preview-header > div:first-child { display: flex; align-items: baseline; gap: 10px; }
 #device-name { color: var(--muted); font-size: 12px; }
-.metrics { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 14px; color: var(--muted); font-size: 12px; }
+.metrics { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 12px; }
 .metrics b { color: var(--text); font-weight: 600; }
-.preview-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 290px; align-items: stretch; }
+.preview-workspace { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 .preview-display { min-width: 0; padding: 12px; background: #eef0f2; }
 .viewport { position: relative; display: flex; width: min(960px, 100%); max-width: 100%; aspect-ratio: 16 / 9; align-items: center; justify-content: center; overflow: hidden; background: #eef0f2; }
 #preview-image { display: none; width: 100%; height: 100%; object-fit: contain; }
@@ -101,7 +106,8 @@ fieldset { margin: 0; padding: 0; border: 0; }
 .processing-region span { background: #b45309; }
 .draft-region { border-style: dashed; border-color: #2563eb; background: rgba(37, 99, 235, .08); }
 .selection-layer.processing-mode .draft-region { border-color: #d97706; background: rgba(217, 119, 6, .10); }
-.region-tools { padding: 14px; border-left: 1px solid var(--border); background: #fafafa; }
+.region-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 14px; border-top: 1px solid var(--border); background: #fafafa; }
+.uvc-mode .region-tools { grid-template-columns: minmax(0, 1fr); }
 .region-tools h3 { margin: 0 0 12px; font-size: 14px; }
 .region-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 .region-actions .button { min-height: 38px; }
@@ -152,7 +158,9 @@ fieldset { margin: 0; padding: 0; border: 0; }
 @media (max-width: 800px) {
   .app { width: min(100% - 24px, 1200px); padding-top: 12px; }
   .header { align-items: flex-start; }
-  .connection-grid, .obs-mode .connection-grid, .uvc-mode .connection-grid, .two-columns, .section-grid, .preview-workspace, .workspace-layout { grid-template-columns: 1fr; }
+  .connection-grid, .obs-mode .connection-grid, .uvc-mode .connection-grid, .two-columns, .section-grid, .preview-workspace, .workspace-layout, .camera-tuning-grid, .region-tools { grid-template-columns: 1fr; }
+  .camera-tuning-grid .stage { position: static; }
+  .camera-tuning-grid .imaging-panel { max-height: none; overflow-y: visible; }
   .sdk-field, .field.full { grid-column: auto; }
   .region-tools { border-top: 1px solid var(--border); border-left: 0; }
   .region-tools .two-columns { grid-template-columns: 1fr 1fr; }
