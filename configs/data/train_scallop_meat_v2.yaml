@@ -8,17 +8,19 @@ data:
 
 train:
   epochs: 100
-  batch: 8                 # RTX 4060 Laptop 8GB 的起步设置，尚未实测训练显存
-  imgsz: 640
+  patience: 25             # 验证指标连续 25 轮未改善时提前停止
+  batch: 4                 # 960 输入下为 8GB 显存留余量，尚未实测训练显存
+  imgsz: 960               # 保留更多重叠目标的边界细节
   device: 0
   workers: 2               # Windows 下减少数据加载进程数
   pretrained: true
   freeze: null             # 整个网络参与微调
   optimizer: AdamW
-  lr0: 0.001               # 与上次一致；从已收敛权重继续微调时可考虑降低
+  lr0: 0.0003              # 从已收敛的扇贝模型以较小学习率继续微调
   lrf: 0.01
   weight_decay: 0.0005
   warmup_epochs: 3.0
+  warmup_bias_lr: 0.0      # AdamW 微调时避免偏置从较高学习率开始预热
   cos_lr: true
   seed: 42
   deterministic: true
