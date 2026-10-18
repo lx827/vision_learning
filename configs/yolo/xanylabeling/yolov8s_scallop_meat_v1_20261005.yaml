@@ -1,0 +1,17 @@
+# X-AnyLabeling：v1 版微调仿真扇贝肉 YOLOv8s 单类别检测模型。
+# 加载自定义模型时选择本 YAML，打开待标注图片目录。
+# 模型来源：weights/scallop_meat/scallop_meat_v1_20261005_best.pt
+# ONNX 导出：python src/exporter.py --weights weights/scallop_meat/scallop_meat_v1_20261005_best.pt --format onnx --imgsz 640
+type: yolov8
+name: yolov8s-scallop-meat-v1-20261005
+provider: Ultralytics
+display_name: YOLOv8s 扇贝肉检测 v1（20261005）
+model_path: E:/A-codehub/vision_learning/weights/yolo/onnx/scallop_meat_v1_yolov8s.onnx
+engine: ort
+input_width: 640
+input_height: 640
+conf_threshold: 0.25
+iou_threshold: 0.45
+max_det: 300
+classes:
+  - scallop_meat
