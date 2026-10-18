@@ -118,6 +118,7 @@ class YOLOTrainer(LoggerMixin):
         args = {
             "data": data_yaml,
             "epochs": train_config.get("epochs", 50),
+            "patience": train_config.get("patience", 100),
             "batch": train_config.get("batch", 16),
             "imgsz": train_config.get("imgsz", 640),
             "lr0": train_config.get("lr0", 0.01),
@@ -126,6 +127,7 @@ class YOLOTrainer(LoggerMixin):
             "weight_decay": train_config.get("weight_decay", 0.0005),
             "warmup_epochs": train_config.get("warmup_epochs", 3.0),
             "warmup_momentum": train_config.get("warmup_momentum", 0.8),
+            "warmup_bias_lr": train_config.get("warmup_bias_lr", 0.1),
             "box": train_config.get("box", 7.5),
             "cls": train_config.get("cls", 0.5),
             "dfl": train_config.get("dfl", 1.5),

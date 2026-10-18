@@ -4,7 +4,7 @@
 
 ## 已准备的数据与配置
 
-- 训练配置：`configs/train_scallop_meat.yaml`。
+- 训练配置：`configs/data/train_scallop_meat.yaml`。
 - 数据配置：`configs/data/scallop_meat.yaml`，其中数据根目录为本机绝对路径；移动仓库后需要更新 `path`。
 - 预训练权重：`weights/yolo/pytorch/yolov8s.pt`。
 - 数据集：`data/scallop_meat/train/{images,labels}` 和 `data/scallop_meat/valid/{images,labels}`。
@@ -26,7 +26,7 @@
 在 **Windows PowerShell** 中，把工作目录切换到 `E:/A-codehub/vision_learning`。下面的命令由你手动执行：它调用本仓库训练器，加载独立配置，在 GPU 0 上启动训练，并将日志、指标和权重写入 `runs/logs/` 及 `train/`。不需要管理员权限；首次运行时 Ultralytics 的 AMP 自检或其他组件可能下载辅助资源，因此应允许网络访问。
 
 ```powershell
-python src/trainer.py --config configs/train_scallop_meat.yaml
+python src/trainer.py --config configs/data/train_scallop_meat.yaml
 ```
 
 以上命令使用终端当前的 Python；如使用其他环境，应确保安装了项目依赖且 CUDA 可用。如果出现显存不足，把本配置的 `train.batch` 从 8 改为 4 后重新运行；若 Windows 数据加载进程报错，可以把 `train.workers` 改为 0。尚未发生这些错误，调整方式仅供遇到对应错误时使用。
@@ -34,3 +34,20 @@ python src/trainer.py --config configs/train_scallop_meat.yaml
 实验目录自动命名为 `train/scallop_meat_yolov8s_e100_YYYYMMDD/`；同名目录存在时，Ultralytics 会追加编号，具体以控制台输出为准。预计包括 `weights/best.pt`、`weights/last.pt`、`results.csv` 和训练/验证可视化，训练结束后检查控制台是否正常结束、最佳权重是否存在，以及验证预测是否有漏检或误检。仅凭某一张图片的框数量相等，不能证明目标都检测正确。
 
 准备时，现有训练器传入的 `label_smoothing` 和 `crop_fraction` 被本机 Ultralytics 作为弃用参数接受并移除，会产生警告，不影响本次参数解析检查。训练器现有 4 项单元测试全部通过；检查过程只解析参数和加载权重，没有调用训练、验证或预测。后续累计计数需要在传送带安装后补充实际输送数据，并用已知数量的连续视频验证。
+
+## 网页选择模型权重
+
+“扇贝个数实时检测”页面的“检测参数”中可直接选择模型权重。固定目录为项目下的 `weights/scallop_meat/`；将扇贝检测的 `.pt` 权重放入该目录，点击“刷新权重列表”即可列出，无需输入文件路径。支持子目录，列表使用相对文件名区分模型。
+
+本机已将两轮训练的 `best.pt` 复制到此目录，原始训练文件保留：
+
+- `scallop_meat_20260916_best.pt`：第一轮模型。
+- `scallop_meat_v1_20261005_best.pt`：第二轮模型，作为启动时的默认模型。
+
+默认权重及模型目录由 `configs/scallop_count.yaml` 的 `model.weights`、`model.directory` 指定。网页切换只影响当前会话，重启服务后使用配置中的默认模型。权重文件属于本地模型资产，沿用仓库忽略规则，不纳入 Git；在其他机器上运行时需要将权重文件放到对应目录。
+
+停止监测并等待预热完成后可以切换模型，切换会自动在后台预热，下一次开始监测时使用所选权重。预热不连接相机、不读取现场画面，也不会清零累计数；新一轮监测仍按原规则从零开始。界面会显示预热状态和权重文件名；预热失败会显示错误，避免把上一个已加载模型误认为新模型已就绪。
+
+“监测控制”中的“显示 ROI 外目标框”默认勾选，监测中可直接切换。ROI 计数时，按目标中心点判定区域内外：区域内画黄框，区域外画绿框；取消勾选后隐藏区域外目标的框、ID 和置信度标签。该选项仅影响显示，仍保留整幅画面的检测与跟踪，不改变累计计数或“当前目标”的统计范围。选项在本次服务会话内保留，重启服务后恢复勾选。过线计数继续使用原来的 ROI 裁剪检测和计数线规则。
+
+“启用计数”默认勾选，开始监测前可取消勾选；此时仍执行原有检测、跟踪和出框，“当前目标”照常更新，累计计数保持为 0，画面显示 `Count OFF`。监测中锁定该选项，停止后可重新选择，下一轮开始时生效，适用于 ROI 和过线两种计数方式。桌面端右侧控制栏可独立上下滚动，便于观察左侧画面的同时调节参数；窄屏仍使用整页纵向滚动。

@@ -44,11 +44,14 @@ class CountingService:
     def _load_defaults(self) -> dict[str, Any]:
         data = yaml.safe_load(self._config_path.read_text(encoding="utf-8")) or {}
         model = data.get("model", {})
+        self._model_directory = self._weights_path(model.get("directory", "weights/scallop_meat"))
         tracking = data.get("tracking", {})
         roi = data.get("roi", {})
         line = data.get("count_line", {})
         return {
             "count_mode": str(data.get("counting", {}).get("mode", "line")),
+            "count_enabled": True,
+            "show_outside_roi": True,
             "weights": str(model.get("weights", "")),
             "imgsz": int(model.get("imgsz", 960)),
             "conf": float(model.get("conf", 0.10)),
@@ -68,6 +71,35 @@ class CountingService:
             "deadband_px": float(line.get("deadband_px", 4)),
         }
 
+    @staticmethod
+    def _weights_path(weights: str | Path) -> Path:
+        path = Path(weights).expanduser()
+        return (path if path.is_absolute() else PROJECT_ROOT / path).resolve()
+
+    @staticmethod
+    def _model_cache_key(config: dict[str, Any]) -> tuple[str, ...]:
+        return tuple(str(config[name]) for name in ("weights", "device", "imgsz", "tracker"))
+
+    def available_models(self) -> dict[str, Any]:
+        """枚举固定目录的权重，并兼容配置中已有的目录外权重。"""
+        with self._lock:
+            selected = self._config["weights"]
+        paths = set(self._model_directory.rglob("*.pt"))
+        current = self._weights_path(selected)
+        if current.is_file() and current.suffix.lower() == ".pt":
+            paths.add(current)
+        models = []
+        for path in sorted(paths):
+            if not path.is_file():
+                continue
+            path = path.resolve()
+            reference = path.relative_to(PROJECT_ROOT).as_posix() if path.is_relative_to(PROJECT_ROOT) else path.as_posix()
+            if path == current:
+                reference = selected
+            name = path.relative_to(self._model_directory).as_posix() if path.is_relative_to(self._model_directory) else reference
+            models.append({"path": reference, "name": name, "size_bytes": path.stat().st_size})
+        return {"directory": str(self._model_directory), "models": models, "selected": selected}
+
     @property
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -76,7 +108,7 @@ class CountingService:
                 "starting": self._starting,
                 "stopping": self._stop.is_set() and self._thread is not None and self._thread.is_alive(),
                 "preparing": self._prepare_thread is not None and self._prepare_thread.is_alive(),
-                "model_ready": self._model is not None,
+                "model_ready": self._model is not None and self._model_key == self._model_cache_key(self._config),
                 "prepare_error": self._prepare_error,
                 "count": self._count,
                 "detections": self._detections,
@@ -91,7 +123,7 @@ class CountingService:
             if self._thread and self._thread.is_alive():
                 return self.status
             config = dict(self._config)
-            for key in ("count_mode", "weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
+            for key in ("count_mode", "count_enabled", "show_outside_roi", "weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
                 if overrides and key in overrides:
                     config[key] = overrides[key]
             if overrides and isinstance(overrides.get("roi"), dict):
@@ -129,6 +161,15 @@ class CountingService:
             self._condition.notify_all()
             return self.status
 
+    def set_display_options(self, options: dict[str, Any]) -> dict[str, Any]:
+        """仅修改绘图选项，监测中切换也不重置模型、跟踪或计数。"""
+        show_outside = options.get("show_outside_roi")
+        if not isinstance(show_outside, bool):
+            raise ValueError("显示 ROI 外目标框必须为布尔值")
+        with self._lock:
+            self._config = {**self._config, "show_outside_roi": show_outside}
+            return self.status
+
     def wait_for_frame(self, after: int, timeout: float = 2.0) -> tuple[int, bytes | None]:
         with self._condition:
             self._condition.wait_for(lambda: self._sequence != after or not self.status["active"], timeout)
@@ -136,6 +177,10 @@ class CountingService:
 
     @staticmethod
     def _validate(config: dict[str, Any]) -> None:
+        if not isinstance(config["count_enabled"], bool):
+            raise ValueError("启用计数必须为布尔值")
+        if not isinstance(config["show_outside_roi"], bool):
+            raise ValueError("显示 ROI 外目标框必须为布尔值")
         if config["count_mode"] not in {"line", "roi"}:
             raise ValueError("计数方式必须是过线计数或 ROI 计数")
         weights = Path(str(config["weights"])).expanduser()
@@ -174,7 +219,7 @@ class CountingService:
 
     def _get_model(self, config: dict[str, Any]):
         """Prepare once; the worker and warmup thread never use a model concurrently."""
-        key = tuple(str(config[name]) for name in ("weights", "device", "imgsz", "tracker"))
+        key = self._model_cache_key(config)
         with self._model_lock:
             if self._model is not None and self._model_key == key:
                 return self._model
@@ -194,13 +239,22 @@ class CountingService:
             self._model_key = key
             return model
 
-    def prepare(self) -> dict[str, Any]:
-        """Warm the configured model without connecting or consuming camera frames."""
+    def prepare(self, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+        """选择并预热本次会话的权重，不连接相机或消耗相机帧。"""
         with self._lock:
-            if self.status["active"] or self.status["preparing"]:
-                return self.status
             config = dict(self._config)
+            if overrides and "weights" in overrides:
+                weights = overrides["weights"]
+                if not isinstance(weights, str) or Path(weights).suffix.lower() != ".pt":
+                    raise ValueError("请选择有效的 .pt 模型权重")
+                config["weights"] = weights
+            changed = config["weights"] != self._config["weights"]
+            if self.status["active"] or self.status["preparing"]:
+                if changed:
+                    raise ValueError("请等待模型预热完成并停止监测后再切换权重")
+                return self.status
             self._validate(config)
+            self._config = config
             self._prepare_error = ""
 
             def warmup():
@@ -253,6 +307,8 @@ class CountingService:
                 result = model.track(crop, **self._track_options(config))[0]
                 boxes = result.boxes
                 ids = boxes.id.int().cpu().tolist() if boxes is not None and boxes.id is not None else [None] * (len(boxes) if boxes is not None else 0)
+                with self._lock:
+                    show_outside_roi = self._config["show_outside_roi"]
                 annotated = frame.copy()
                 cv2.rectangle(annotated, (x, y), (x + width, y + height), (48, 190, 220), 2)
                 if not is_roi:
@@ -266,16 +322,22 @@ class CountingService:
                     offset_x, offset_y = (0, 0) if is_roi else (x, y)
                     full_box = (x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y)
                     center = detection_center(full_box)
-                    if track_id is not None:
+                    if config["count_enabled"] and track_id is not None:
                         counter.update(int(track_id), center)
-                    if not is_roi or x <= center[0] < x + width and y <= center[1] < y + height:
+                    inside_roi = x <= center[0] < x + width and y <= center[1] < y + height
+                    if not is_roi or inside_roi:
                         current += 1
-                    color = (35, 220, 80) if track_id not in counter.counted_ids else (0, 190, 255)
+                    # 只隐藏区域外的框与标签，仍保留完整跟踪和计数更新。
+                    if not inside_roi and not show_outside_roi:
+                        continue
+                    highlighted = inside_roi if is_roi else track_id in counter.counted_ids
+                    color = (0, 190, 255) if highlighted else (35, 220, 80)
                     cv2.rectangle(annotated, (full_box[0], full_box[1]), (full_box[2], full_box[3]), color, 2)
                     label = f"ID {track_id if track_id is not None else '-'}  {float(confidence):.2f}"
                     cv2.putText(annotated, label, (full_box[0], max(22, full_box[1] - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 cv2.rectangle(annotated, (14, 14), (300, 102), (22, 28, 32), -1)
-                cv2.putText(annotated, f"Count  {counter.count}", (28, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                count_label = f"Count  {counter.count}" if config["count_enabled"] else "Count  OFF"
+                cv2.putText(annotated, count_label, (28, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
                 cv2.putText(annotated, f"Detect  {current}", (28, 82), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (210, 220, 225), 1)
                 ok, encoded = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
                 if not ok:

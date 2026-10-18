@@ -4,7 +4,7 @@
 
 ## 已准备的数据与配置
 
-- 训练配置：`configs/train_scallop_meat_v1.yaml`。
+- 训练配置：`configs/data/train_scallop_meat_v1.yaml`。
 - 数据配置：`configs/data/scallop_meat_v1.yaml`，其中数据根目录为本机绝对路径；移动仓库后需要更新 `path`。
 - 预训练权重：`runs/detect/train/scallop_meat_yolov8s_e100_20260916/weights/best.pt`，即第一次用 camera 数据集训练出的最佳权重，类别同为 `0 = scallop_meat`。
 - 数据集：`data/scallop_meat_v1/train/{images,labels}` 和 `data/scallop_meat_v1/valid/{images,labels}`。
@@ -30,7 +30,7 @@
 在 **Windows PowerShell** 中，把工作目录切换到 `E:/A-codehub/vision_learning`。下面的命令由你手动执行：它调用本仓库训练器，加载独立配置，在 GPU 0 上启动训练，并将日志、指标和权重写入 `runs/logs/` 及 `train/`。不需要管理员权限；首次运行时 Ultralytics 的 AMP 自检或其他组件可能下载辅助资源，因此应允许网络访问。
 
 ```powershell
-python src/trainer.py --config configs/train_scallop_meat_v1.yaml
+python src/trainer.py --config configs/data/train_scallop_meat_v1.yaml
 ```
 
 实验目录按「数据集_模型_轮数_日期」自动命名，本次为 `train/scallop_meat_v1_best_e100_YYYYMMDD/`（模型名取自权重文件名 `best.pt`）；同名目录存在时，Ultralytics 会追加编号，具体以控制台输出为准。训练结束后检查控制台是否正常结束、`weights/best.pt` 是否存在，以及验证预测是否有漏检或误检。

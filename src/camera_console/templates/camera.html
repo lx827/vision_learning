@@ -82,6 +82,7 @@
         </div>
       </section>
 
+      <div class="camera-tuning-grid">
       <section class="panel stage" aria-label="实时相机画面">
         <div class="preview-header">
           <div>
@@ -168,6 +169,31 @@
         <div class="fps-warning" id="fps-warning" role="alert" hidden></div>
       </section>
 
+          <section class="panel imaging-panel frame-source-only">
+            <h2>成像参数</h2>
+            <p class="help client-only" id="standard-imaging-help" hidden>DroidCam 客户端模式只读取画面；镜头、曝光、对焦和白平衡请在 DroidCam 中设置。</p>
+            <fieldset id="uvc-imaging-fields" class="uvc-only" disabled hidden>
+              <p class="help" id="uvc-imaging-help" role="status" aria-live="polite">连接后读取设备实际支持的成像参数。</p>
+              <button class="button" id="refresh-uvc-parameters-button" type="button">刷新成像参数</button>
+              <div class="form-grid two-columns" id="uvc-properties"></div>
+              <p class="help">每项点击“应用”后即时生效，并回读设备实际值。自动模式下的从属项不可手动修改；切换模式后会刷新可写状态。参数不会保存到网页配置。</p>
+            </fieldset>
+            <fieldset id="imaging-fields" disabled>
+              <div class="form-grid two-columns">
+                <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small><small class="timing-advice" id="exposure-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示时序余量。</small></div>
+                <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
+                <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
+                <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">启用帧率限制</label></div>
+                <div class="field"><label for="fps-value">目标采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small><small class="timing-advice" id="fps-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示建议上限。</small></div>
+                <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
+              </div>
+              <p class="help">目标帧率是期望上限，不保证相机一定达到；曝光、传感器读出、传输和处理速度都会限制实际帧率。录像文件使用相机返回的同一目标帧率。</p>
+              <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
+            </fieldset>
+          </section>
+      </div>
+
       <div class="section-grid">
         <div class="column">
           <section class="panel capture-panel">
@@ -198,6 +224,8 @@
             </div>
           </section>
 
+        </div>
+        <div class="column">
           <section class="panel output-panel">
             <div class="panel-title"><h2>输出设置</h2></div>
             <div class="form-grid two-columns">
@@ -208,37 +236,11 @@
               <div class="field frame-source-only"><label for="video-format">视频格式</label><select id="video-format"><option value="mp4">MP4</option><option value="avi">AVI</option></select></div>
               <div class="field full"><label for="video-dir" id="video-dir-label">视频目录</label><input id="video-dir"></div>
             </div>
-            <p class="help" id="output-help">输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。</p>
+            <p class="help" id="output-help">输出最大宽高位于实时画面下方；这里保存照片、录像格式和目录设置。</p>
             <button class="button" id="save-output-button" type="button">保存输出设置</button>
           </section>
         </div>
 
-        <div class="column">
-          <section class="panel imaging-panel frame-source-only">
-            <h2>成像参数</h2>
-            <p class="help client-only" id="standard-imaging-help" hidden>DroidCam 客户端模式只读取画面；镜头、曝光、对焦和白平衡请在 DroidCam 中设置。</p>
-            <fieldset id="uvc-imaging-fields" class="uvc-only" disabled hidden>
-              <p class="help" id="uvc-imaging-help" role="status" aria-live="polite">连接后读取设备实际支持的成像参数。</p>
-              <button class="button" id="refresh-uvc-parameters-button" type="button">刷新成像参数</button>
-              <div class="form-grid two-columns" id="uvc-properties"></div>
-              <p class="help">每项点击“应用”后即时生效，并回读设备实际值。自动模式下的从属项不可手动修改；切换模式后会刷新可写状态。参数不会保存到网页配置。</p>
-            </fieldset>
-            <fieldset id="imaging-fields" disabled>
-              <div class="form-grid two-columns">
-                <div class="field"><label for="exposure-mode">曝光模式</label><select id="exposure-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
-                <div class="field"><label for="exposure-value">曝光时间（μs）</label><input id="exposure-value" type="number" step="1"><small id="exposure-range">—</small><small class="timing-advice" id="exposure-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示时序余量。</small></div>
-                <div class="field"><label for="gain-mode">增益模式</label><select id="gain-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">手动</option></select></div>
-                <div class="field"><label for="gain-value">增益（dB）</label><input id="gain-value" type="number" step="0.1"><small id="gain-range">—</small></div>
-                <div class="field checkbox-field"><input id="fps-enabled" type="checkbox"><label for="fps-enabled">启用帧率限制</label></div>
-                <div class="field"><label for="fps-value">目标采集/录像帧率（FPS）</label><input id="fps-value" type="number" step="0.1"><small id="fps-range">—</small><small class="timing-advice" id="fps-timing-advice" role="status" aria-live="polite">输入曝光和目标帧率后显示建议上限。</small></div>
-                <div class="field full"><label for="white-balance-mode">白平衡</label><select id="white-balance-mode"><option value="continuous">连续自动</option><option value="once">单次自动</option><option value="off">关闭</option></select></div>
-              </div>
-              <p class="help">目标帧率是期望上限，不保证相机一定达到；曝光、传感器读出、传输和处理速度都会限制实际帧率。录像文件使用相机返回的同一目标帧率。</p>
-              <button class="button primary" id="apply-parameters-button" type="button">应用成像参数</button>
-            </fieldset>
-          </section>
-
-        </div>
       </div>
       </div>
 

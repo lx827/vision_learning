@@ -118,7 +118,7 @@ function updateSourceUi() {
     ? "OBS 截图固定保存为 PNG；录像格式和尺寸沿用 OBS 设置，录像目录在每次开始时应用。"
     : uvc
       ? "照片固定为原始尺寸 JPG，拍照会等待曝光稳定。AVI 为 MJPEG 直通；MP4 使用内核 H.264 编码及硬件编码回退。格式或尺寸切换前须断开相机。"
-    : "输出最大宽高已移到实时画面右侧；这里保存照片、录像格式和目录设置。";
+    : "输出最大宽高位于实时画面下方；这里保存照片、录像格式和目录设置。";
   $("empty-state").textContent = obs
     ? "连接 OBS 后在这里显示实时取景预览"
     : "连接相机后在这里显示实时画面";
@@ -931,8 +931,14 @@ function renderUvcParameters(parameters) {
   const container = $("uvc-properties");
   container.replaceChildren();
   const exposureAvailable = properties.some((property) => [11, 12].includes(property.id));
+  const gainAvailable = properties.some((property) => property.id === 6);
+  const automaticExposure = properties.some((property) => property.id === 11 && property.value === 1)
+    || properties.some((property) => property.id === 12 && property.is_auto);
   $("uvc-imaging-help").textContent = properties.length
-    ? `已读取 ${properties.length} 项成像参数。${exposureAvailable ? "" : "当前设备的 Windows 驱动未暴露曝光控制，网页无法调节曝光。"}`
+    ? `已读取 ${properties.length} 项成像参数。`
+      + (exposureAvailable ? "" : "当前设备的 Windows 驱动未暴露曝光控制，网页无法调节曝光。")
+      + (gainAvailable ? "" : "当前设备的 Windows 驱动未提供增益控制，网页无法手动调节增益。")
+      + (automaticExposure ? "自动曝光已开启，亮度可能随光照变化；切换曝光模式为手动后可固定曝光时间。自动模式下驱动可能回读保留的手动值，不能据此判断实际曝光。" : "")
     : "当前设备或驱动未提供可用的成像参数。";
   properties.forEach((property) => {
     const field = document.createElement("div");
@@ -969,7 +975,7 @@ function renderUvcParameters(parameters) {
     control.disabled = locked;
     const help = document.createElement("small");
     help.id = `${control.id}-help`;
-    help.textContent = `设备当前值：${property.value}${unit ? ` ${unit}` : ""}。`
+    help.textContent = `设备回读值：${property.value}${unit ? ` ${unit}` : ""}。`
       + (property.type === 0 ? `范围 ${property.minimum}–${property.maximum}；${property.step > 0 ? `步长 ${property.step}` : "由驱动按档位换算"}。` : "")
       + (property.flags & 2 ? "设备暂时禁用。" : property.is_auto ? "自动模式控制中。" : property.flags & 1 ? "当前只读。" : "");
     control.setAttribute("aria-describedby", help.id);

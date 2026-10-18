@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from unittest.mock import Mock
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent
@@ -61,6 +62,29 @@ class TestYOLOTrainer:
         assert args["epochs"] == 10
         assert args["batch"] == 16
         assert args["imgsz"] == 640
+
+    def test_train_forwards_scheduling_options(self):
+        """确认预热学习率和提前停止参数传入模型，不执行真实训练。"""
+        config = {
+            "model": {"name": "yolov8n.pt"},
+            "data": {"name": "coco128.yaml"},
+            "train": {
+                "epochs": 100,
+                "batch": 4,
+                "imgsz": 960,
+                "warmup_bias_lr": 0.0,
+                "patience": 25,
+            },
+        }
+        trainer = YOLOTrainer(config)
+        trainer.model = Mock()
+        trainer.model.train.return_value = None
+
+        trainer.train()
+
+        args = trainer.model.train.call_args.kwargs
+        assert args["warmup_bias_lr"] == 0.0
+        assert args["patience"] == 25
 
 
 if __name__ == "__main__":

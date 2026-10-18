@@ -125,6 +125,28 @@ def test_console_has_one_entry_and_embedded_pages_have_no_version_navigation():
     assert "传送带监测与单向穿线计数" not in count
 
 
+def test_count_model_catalog_and_selection_api(tmp_path, monkeypatch):
+    app = create_app(service=FakeWebService())
+    counting = app.config["COUNTING_SERVICE"]
+    weights = tmp_path / "selected.pt"
+    weights.write_bytes(b"model")
+    counting._model_directory = tmp_path
+    counting._config["weights"] = weights.as_posix()
+    client = app.test_client()
+    catalog = client.get("/api/count/models").get_json()
+    assert catalog["ok"] is True
+    assert catalog["models"] == [{
+        "path": weights.as_posix(), "name": "selected.pt", "size_bytes": 5,
+    }]
+    assert catalog["selected"] == weights.as_posix()
+    received = []
+    monkeypatch.setattr(counting, "prepare", lambda overrides: received.append(overrides) or counting.status)
+    assert client.post("/api/count/prepare", json={"weights": weights.as_posix()}).status_code == 200
+    assert received == [{"weights": weights.as_posix()}]
+    assert client.post("/api/count/prepare").status_code == 200
+    assert received[-1] == {}
+
+
 def test_region_and_shared_output_size_controls_are_next_to_preview():
     app = create_app(service=FakeWebService())
 
@@ -137,6 +159,33 @@ def test_region_and_shared_output_size_controls_are_next_to_preview():
     assert 'id="output-max-width"' in tools
     assert 'id="output-max-height"' in tools
     assert "当前采集区域" in tools
+
+
+def test_count_display_option_can_be_changed_without_starting_detection():
+    app = create_app(service=FakeWebService())
+    client = app.test_client()
+    assert client.get("/api/count/status").get_json()["status"]["config"]["show_outside_roi"] is True
+    for enabled in (False, True):
+        response = client.put("/api/count/display", json={"show_outside_roi": enabled})
+        assert response.status_code == 200
+        status = response.get_json()["status"]
+        assert status["config"]["show_outside_roi"] is enabled
+        assert status["active"] is False
+        assert status["count"] == 0
+    for invalid in ({}, {"show_outside_roi": "false"}, {"show_outside_roi": 0}, {"show_outside_roi": None}):
+        assert client.put("/api/count/display", json=invalid).status_code == 400
+        assert client.get("/api/count/status").get_json()["status"]["config"]["show_outside_roi"] is True
+
+
+def test_count_enabled_is_validated_before_starting_camera():
+    app = create_app(service=FakeWebService())
+    client = app.test_client()
+    assert client.get("/api/count/status").get_json()["status"]["config"]["count_enabled"] is True
+    for invalid in ("false", 0, None):
+        response = client.post("/api/count/start", json={"count_enabled": invalid})
+        assert response.status_code == 400
+        assert "启用计数必须为布尔值" in response.get_json()["error"]
+        assert app.config["COUNTING_SERVICE"].status["active"] is False
 
 
 def test_camera_source_selector_has_three_peer_sources_and_one_control_set():

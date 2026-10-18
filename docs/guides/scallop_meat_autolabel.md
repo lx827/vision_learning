@@ -3,7 +3,7 @@
 ## 已准备的文件
 
 - 图片副本：`data/camera_autolabel/`，共 296 张，准备时仅含图片，没有复制 JSON、YOLO 标签或类别文件；原始图片与人工标签保留在 `data/camera/`。
-- X-AnyLabeling 模型配置：`configs/yolo/xanylabeling/yolov8s_scallop_meat.yaml`。
+- X-AnyLabeling 模型配置：`configs/xanylabeling/yolov8s_scallop_meat.yaml`。
 - ONNX 模型：`weights/yolo/onnx/scallop_meat_yolov8s.onnx`。
 - 模型来源：`runs/detect/train/scallop_meat_yolov8s_e100_20260916/weights/best.pt`，类别为 `0 = scallop_meat`。
 
@@ -15,7 +15,7 @@ ONNX 采用 FP32、固定输入 `[1, 3, 640, 640]`、batch 1、opset 12，输出
 
 1. 打开软件，通过 **文件 → 打开目录**（默认快捷键 `Ctrl+U`）选择 `E:/A-codehub/vision_learning/data/camera_autolabel`。
 2. 通过 **文件 → 更改输出目录**（默认 `Ctrl+Shift+S`）将标注输出目录也设为上述副本目录；检查自动保存是否开启。
-3. 打开 AI/自动标注面板，在模型下拉列表选择 **加载自定义模型**，选取 `configs/yolo/xanylabeling/yolov8s_scallop_meat.yaml`。导入的是 YAML，模型路径已由配置指定。
+3. 打开 AI/自动标注面板，在模型下拉列表选择 **加载自定义模型**，选取 `configs/xanylabeling/yolov8s_scallop_meat.yaml`。导入的是 YAML，模型路径已由配置指定。
 4. 在一张图片上点击 **运行**（默认快捷键 `I`），检查输出是否为 `scallop_meat` 矩形框。
 5. 通过 **批量标注**（默认快捷键 `Ctrl+B`）打开批量窗口，选择全部图片并启动，等待完成。快捷键及加载入口参考 [官方用户手册](https://github.com/CVHub520/X-AnyLabeling/blob/main/docs/zh_cn/user_guide.md) 和 [自定义模型说明](https://github.com/CVHub520/X-AnyLabeling/blob/main/docs/zh_cn/custom_model.md)。
 6. 在副本目录逐张检查生成的 JSON，纠正漏框、错框、重复框，再考虑导出 YOLO HBB。导出类别文件可使用已有的 `data/camera/photos/classes.txt`。

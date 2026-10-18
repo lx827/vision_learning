@@ -18,14 +18,23 @@
           <div class="preview-surface" id="count-surface" data-resizable-preview>
             <img id="count-frame" alt="扇贝肉传送带实时检测画面" draggable="false">
             <div class="stage-empty" id="stage-empty">请先在相机设置连接相机，即可预览并框选 ROI</div>
-            <div id="roi-layer" aria-label="拖动框选检测 ROI">
-              <div id="roi-box" hidden><span>检测 ROI</span></div>
+            <div id="roi-layer" aria-label="框选、移动或调整检测 ROI">
+              <div id="roi-box" hidden><span>检测 ROI</span>
+                <i class="roi-handle" data-edge="nw" aria-hidden="true"></i>
+                <i class="roi-handle" data-edge="n" aria-hidden="true"></i>
+                <i class="roi-handle" data-edge="ne" aria-hidden="true"></i>
+                <i class="roi-handle" data-edge="e" aria-hidden="true"></i>
+                <i class="roi-handle" data-edge="se" aria-hidden="true"></i>
+                <i class="roi-handle" data-edge="s" aria-hidden="true"></i>
+                <i class="roi-handle" data-edge="sw" aria-hidden="true"></i>
+                <i class="roi-handle" data-edge="w" aria-hidden="true"></i>
+              </div>
             </div>
             <div class="preview-resize-handle" role="slider" tabindex="0" aria-label="调整画面大小，保持比例" aria-valuemin="240" aria-valuemax="960" aria-valuenow="960"></div>
           </div>
         </div>
       </section>
-      <aside class="control-column">
+      <aside class="control-column" tabindex="0" aria-label="检测控制与参数">
         <section class="metric-strip">
           <div class="metric-main"><strong id="count-value">0</strong><span>累计计数</span></div>
           <div><strong id="detect-value">0</strong><span>当前目标</span></div>
@@ -40,9 +49,27 @@
           </div>
           <p class="error-text" id="error-text" role="status" hidden></p>
           <p class="field-help" id="model-state" role="status" aria-live="polite"></p>
+          <label class="checkbox-field" for="count-enabled">
+            <input id="count-enabled" type="checkbox" checked disabled aria-describedby="count-enabled-help">
+            启用计数
+          </label>
+          <p class="field-help" id="count-enabled-help">开始监测前选择，监测中不可修改。取消勾选后只检测、跟踪和显示目标框，累计计数保持为 0。</p>
+          <label class="checkbox-field" for="show-outside-roi">
+            <input id="show-outside-roi" type="checkbox" checked disabled aria-describedby="outside-roi-help">
+            显示 ROI 外目标框
+          </label>
+          <p class="field-help" id="outside-roi-help">ROI 计数时，区域内为黄框，区域外为绿框。取消勾选后只显示中心点位于 ROI 内的目标框和标签；监测中即时生效，不影响计数。</p>
+          <p class="error-text" id="display-error" role="status" hidden></p>
         </section>
         <fieldset id="detection-settings" class="control-panel">
           <div class="panel-heading"><h2>检测参数</h2></div>
+          <div class="model-selection">
+            <label for="weights-select">模型权重</label>
+            <select id="weights-select" aria-describedby="weights-help model-directory" disabled><option value="">正在读取权重列表…</option></select>
+            <button class="btn" id="refresh-models-button" type="button">刷新权重列表</button>
+            <p class="field-help" id="model-directory"></p>
+            <p class="field-help" id="weights-help">把扇贝检测的 .pt 权重放入模型目录，刷新后即可选择。切换后自动预热，下次监测生效。</p>
+          </div>
           <div class="field-grid">
             <label>置信度 <input id="conf-input" type="number" min="0.01" max="0.99" step="0.01" value="0.10"></label>
             <label>输入尺寸 <select id="imgsz-input"><option value="640">640</option><option value="960" selected>960</option><option value="1280">1280</option></select></label>
@@ -55,7 +82,7 @@
             <button class="btn" id="draw-roi-button" type="button" disabled>框选 ROI</button>
             <button class="btn" id="full-roi-button" type="button" disabled>使用全图</button>
           </div>
-          <p class="field-help" id="roi-help">停止监测后可拖动框选或修改 ROI；下次开始时生效。坐标以相机原始画面为准。</p>
+          <p class="field-help" id="roi-help">停止监测后，拖动框内可移动 ROI，拖动边角控制点可调整大小；也可输入坐标或重新框选。下次开始时生效，坐标以相机原始画面为准。Esc 可取消本次拖动。</p>
           <p class="field-help">拖动画面右下角调整显示大小，始终保持原始比例。</p>
         </fieldset>
         <fieldset id="count-settings" class="control-panel">
