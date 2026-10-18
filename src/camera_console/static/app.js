@@ -931,8 +931,14 @@ function renderUvcParameters(parameters) {
   const container = $("uvc-properties");
   container.replaceChildren();
   const exposureAvailable = properties.some((property) => [11, 12].includes(property.id));
+  const gainAvailable = properties.some((property) => property.id === 6);
+  const automaticExposure = properties.some((property) => property.id === 11 && property.value === 1)
+    || properties.some((property) => property.id === 12 && property.is_auto);
   $("uvc-imaging-help").textContent = properties.length
-    ? `已读取 ${properties.length} 项成像参数。${exposureAvailable ? "" : "当前设备的 Windows 驱动未暴露曝光控制，网页无法调节曝光。"}`
+    ? `已读取 ${properties.length} 项成像参数。`
+      + (exposureAvailable ? "" : "当前设备的 Windows 驱动未暴露曝光控制，网页无法调节曝光。")
+      + (gainAvailable ? "" : "当前设备的 Windows 驱动未提供增益控制，网页无法手动调节增益。")
+      + (automaticExposure ? "自动曝光已开启，亮度可能随光照变化；切换曝光模式为手动后可固定曝光时间。" : "")
     : "当前设备或驱动未提供可用的成像参数。";
   properties.forEach((property) => {
     const field = document.createElement("div");

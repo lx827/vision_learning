@@ -16,6 +16,19 @@
 #roi-layer { position:absolute; inset:0; z-index:2; overflow:hidden; pointer-events:none; touch-action:none; }
 #roi-layer.drawing { cursor:crosshair; pointer-events:auto; }
 #roi-box { position:absolute; border:2px solid #d69e00; pointer-events:none; }
+#roi-layer.editable #roi-box { pointer-events:auto; cursor:move; }
+#roi-layer.drawing #roi-box { pointer-events:none; }
+#roi-layer.editable .roi-handle { position:absolute; width:24px; height:24px; }
+.roi-handle::after { content:""; position:absolute; inset:7px; border:1px solid #876500; background:#fff; }
+#roi-layer:not(.editable) .roi-handle, #roi-layer.drawing .roi-handle { display:none; }
+.roi-handle[data-edge="nw"] { left:-2px; top:-2px; cursor:nwse-resize; }
+.roi-handle[data-edge="n"] { left:calc(50% - 12px); top:-2px; cursor:ns-resize; }
+.roi-handle[data-edge="ne"] { right:-2px; top:-2px; cursor:nesw-resize; }
+.roi-handle[data-edge="e"] { right:-2px; top:calc(50% - 12px); cursor:ew-resize; }
+.roi-handle[data-edge="se"] { right:-2px; bottom:-2px; cursor:nwse-resize; }
+.roi-handle[data-edge="s"] { left:calc(50% - 12px); bottom:-2px; cursor:ns-resize; }
+.roi-handle[data-edge="sw"] { left:-2px; bottom:-2px; cursor:nesw-resize; }
+.roi-handle[data-edge="w"] { left:-2px; top:calc(50% - 12px); cursor:ew-resize; }
 #roi-box span { position:absolute; top:0; left:0; padding:2px 5px; color:#fff; background:#876500; font-size:11px; white-space:nowrap; }
 fieldset.control-panel { min-width:0; margin:0; }
 .roi-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }

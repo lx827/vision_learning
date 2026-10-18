@@ -138,7 +138,12 @@ function setRoi(region) {
 function renderRoi() {
   const region = roi();
   const box = $("roi-box");
-  box.hidden = !state.sourceWidth || !$("count-frame").naturalWidth;
+  const editable = !state.active && !state.starting && state.connected;
+  $("roi-layer").classList.toggle("editable", editable);
+  if (!editable && (state.drag || state.drawing)) cancelDrawing(true);
+  // 更换实时帧时 naturalWidth 会短暂归零，用已显示首帧的状态避免框和控制点闪烁。
+  box.hidden = !state.connected || !state.sourceWidth || !state.sourceHeight
+    || !$("count-frame").classList.contains("active");
   if (box.hidden) return;
   const width = $("roi-layer").clientWidth;
   const height = $("roi-layer").clientHeight;
@@ -148,11 +153,16 @@ function renderRoi() {
   box.style.height = `${region.height / state.sourceHeight * height}px`;
 }
 
-function cancelDrawing() {
+function cancelDrawing(restore = false) {
+  const drag = state.drag;
   state.drawing = false;
   state.drag = null;
   $("roi-layer").classList.remove("drawing");
   $("draw-roi-button").textContent = "框选 ROI";
+  if (drag && $("roi-layer").hasPointerCapture(drag.pointerId)) {
+    $("roi-layer").releasePointerCapture(drag.pointerId);
+  }
+  if (restore && drag) setRoi(drag.previous);
 }
 
 function pointerPixel(event) {
@@ -170,25 +180,52 @@ $("draw-roi-button").addEventListener("click", () => {
   $("draw-roi-button").textContent = "取消框选";
 });
 $("roi-layer").addEventListener("pointerdown", (event) => {
-  if (!state.drawing || event.button !== 0 || !$("count-frame").naturalWidth) return;
+  if (state.active || state.starting || !state.connected || !state.sourceWidth
+      || !state.sourceHeight || event.button !== 0
+      || !$("count-frame").classList.contains("active")) return;
+  const box = event.target.closest("#roi-box");
+  if (!state.drawing && !box) return;
   event.preventDefault();
-  state.drag = { point: pointerPixel(event), previous: roi() };
+  state.drag = { point: pointerPixel(event), previous: roi(), pointerId: event.pointerId,
+    mode: state.drawing ? "draw" : event.target.dataset.edge || "move" };
   event.currentTarget.setPointerCapture(event.pointerId);
 });
 $("roi-layer").addEventListener("pointermove", (event) => {
-  if (!state.drag) return;
+  if (!state.drag || event.pointerId !== state.drag.pointerId) return;
   const point = pointerPixel(event);
   const start = state.drag.point;
+  const { previous, mode } = state.drag;
+  const dx = Math.round(point.x - start.x);
+  const dy = Math.round(point.y - start.y);
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+  if (mode === "move") {
+    setRoi({ ...previous,
+      x: clamp(previous.x + dx, 0, state.sourceWidth - previous.width),
+      y: clamp(previous.y + dy, 0, state.sourceHeight - previous.height) });
+    return;
+  }
+  if (mode !== "draw") {
+    // 固定对侧边界，控制点限制在原始画面内，最小区域为 1 像素。
+    let left = previous.x, top = previous.y;
+    let right = left + previous.width, bottom = top + previous.height;
+    if (mode.includes("w")) left = clamp(left + dx, 0, right - 1);
+    if (mode.includes("e")) right = clamp(right + dx, left + 1, state.sourceWidth);
+    if (mode.includes("n")) top = clamp(top + dy, 0, bottom - 1);
+    if (mode.includes("s")) bottom = clamp(bottom + dy, top + 1, state.sourceHeight);
+    setRoi({ x: left, y: top, width: right - left, height: bottom - top });
+    return;
+  }
   const x = Math.min(state.sourceWidth - 1, Math.floor(Math.min(start.x, point.x)));
   const y = Math.min(state.sourceHeight - 1, Math.floor(Math.min(start.y, point.y)));
   setRoi({ x, y, width: Math.max(1, Math.ceil(Math.max(start.x, point.x)) - x),
     height: Math.max(1, Math.ceil(Math.max(start.y, point.y)) - y) });
 });
-$("roi-layer").addEventListener("pointerup", () => { if (state.drag) cancelDrawing(); });
-$("roi-layer").addEventListener("pointercancel", () => {
-  if (state.drag) setRoi(state.drag.previous);
-  cancelDrawing();
+$("roi-layer").addEventListener("pointerup", (event) => {
+  if (state.drag && event.pointerId === state.drag.pointerId) cancelDrawing();
 });
+for (const name of ["pointercancel", "lostpointercapture"]) {
+  $("roi-layer").addEventListener(name, () => { if (state.drag) cancelDrawing(true); });
+}
 $("full-roi-button").addEventListener("click", () => {
   cancelDrawing();
   setRoi({ x: 0, y: 0, width: state.sourceWidth, height: state.sourceHeight });
@@ -204,7 +241,7 @@ for (const [id, action] of [["start-button", start], ["stop-button", stop], ["re
     finally { $(id).disabled = id === "start-button" ? state.active : id === "stop-button" ? !state.active : false; }
   });
 }
-window.addEventListener("keydown", (event) => { if (event.key === "Escape") cancelDrawing(); });
+window.addEventListener("keydown", (event) => { if (event.key === "Escape") cancelDrawing(true); });
 window.addEventListener("pagehide", () => {
   state.disposed = true;
   if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
