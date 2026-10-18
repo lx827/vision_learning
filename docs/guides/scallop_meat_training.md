@@ -4,7 +4,7 @@
 
 ## 已准备的数据与配置
 
-- 训练配置：`configs/train_scallop_meat.yaml`。
+- 训练配置：`configs/data/train_scallop_meat.yaml`。
 - 数据配置：`configs/data/scallop_meat.yaml`，其中数据根目录为本机绝对路径；移动仓库后需要更新 `path`。
 - 预训练权重：`weights/yolo/pytorch/yolov8s.pt`。
 - 数据集：`data/scallop_meat/train/{images,labels}` 和 `data/scallop_meat/valid/{images,labels}`。
@@ -26,7 +26,7 @@
 在 **Windows PowerShell** 中，把工作目录切换到 `E:/A-codehub/vision_learning`。下面的命令由你手动执行：它调用本仓库训练器，加载独立配置，在 GPU 0 上启动训练，并将日志、指标和权重写入 `runs/logs/` 及 `train/`。不需要管理员权限；首次运行时 Ultralytics 的 AMP 自检或其他组件可能下载辅助资源，因此应允许网络访问。
 
 ```powershell
-python src/trainer.py --config configs/train_scallop_meat.yaml
+python src/trainer.py --config configs/data/train_scallop_meat.yaml
 ```
 
 以上命令使用终端当前的 Python；如使用其他环境，应确保安装了项目依赖且 CUDA 可用。如果出现显存不足，把本配置的 `train.batch` 从 8 改为 4 后重新运行；若 Windows 数据加载进程报错，可以把 `train.workers` 改为 0。尚未发生这些错误，调整方式仅供遇到对应错误时使用。

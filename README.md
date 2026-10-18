@@ -171,11 +171,10 @@ vision_learning/
 │   ├── val.yaml               # 验证配置
 │   ├── test.yaml              # 测试配置
 │   ├── export.yaml            # 模型导出配置
-│   ├── data/                  # 数据集配置（本地使用，不提交）
+│   ├── data/                  # 数据集与扇贝训练配置
 │   ├── camera/
 │   │   └── camera.yaml        # 各相机来源的共享控制台配置
-│   └── yolo/
-│       └── xanylabeling/      # X-AnyLabeling 模型配置
+│   └── xanylabeling/          # X-AnyLabeling 模型配置
 │
 ├── src/                       # 源代码目录
 │   ├── trainer.py             # 训练器
