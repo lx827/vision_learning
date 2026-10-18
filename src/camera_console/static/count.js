@@ -4,6 +4,7 @@ const state = {
   sourceWidth: 0, sourceHeight: 0, cameraSequence: -1, countSequence: -1,
   objectUrl: "", drawing: false, drag: null, disposed: false,
   status: null, models: [], modelsLoaded: false, modelBusy: false, modelError: "",
+  displayBusy: false,
 };
 
 async function api(path, options = {}) {
@@ -20,6 +21,7 @@ function roi() {
 function payload() {
   return {
     weights: $("weights-select").value,
+    show_outside_roi: $("show-outside-roi").checked,
     count_mode: $("count-mode").value, conf: value("conf-input"), imgsz: value("imgsz-input"),
     roi: roi(), direction: $("direction-input").value,
     line_start: [value("line-x"), 0],
@@ -32,7 +34,7 @@ function syncModelControls() {
   const locked = state.active || state.starting || state.modelBusy;
   $("weights-select").disabled = locked || state.status?.preparing || !state.modelsLoaded;
   $("refresh-models-button").disabled = locked || state.status?.preparing;
-  $("start-button").disabled = locked || !state.initialized || !state.modelsLoaded
+  $("start-button").disabled = locked || state.displayBusy || !state.initialized || !state.modelsLoaded
     || !state.models.some((model) => model.path === $("weights-select").value);
 }
 
@@ -93,6 +95,27 @@ function showError(error) {
   $("error-chip").hidden = !error;
 }
 
+async function changeDisplay() {
+  state.displayBusy = true;
+  $("show-outside-roi").disabled = true;
+  $("display-error").hidden = true;
+  syncModelControls();
+  try {
+    const { status } = await api("/api/count/display", {
+      method: "PUT", body: JSON.stringify({ show_outside_roi: $("show-outside-roi").checked }),
+    });
+    render(status);
+  } catch (error) {
+    $("display-error").textContent = `更新目标框显示失败：${error.message}`;
+    $("display-error").hidden = false;
+  } finally {
+    state.displayBusy = false;
+    $("show-outside-roi").disabled = !state.initialized;
+    $("show-outside-roi").checked = state.status?.config?.show_outside_roi ?? true;
+    syncModelControls();
+  }
+}
+
 function updateRule() {
   const isRoi = $("count-mode").value === "roi";
   $("line-rule-fields").hidden = isRoi;
@@ -117,6 +140,10 @@ function render(status) {
     setRoi(config.roi);
     state.initialized = true;
     updateRule();
+  }
+  if (!state.displayBusy) {
+    $("show-outside-roi").checked = status.config?.show_outside_roi ?? true;
+    $("show-outside-roi").disabled = !state.initialized;
   }
   $("count-value").textContent = status.count ?? 0;
   $("detect-value").textContent = status.detections ?? 0;
@@ -298,6 +325,7 @@ for (const key of ["x", "y", "width", "height"]) $("roi-" + key).addEventListene
 $("count-mode").addEventListener("change", updateRule);
 $("weights-select").addEventListener("change", changeModel);
 $("refresh-models-button").addEventListener("click", loadModels);
+$("show-outside-roi").addEventListener("change", changeDisplay);
 $("count-surface").addEventListener("previewresize", renderRoi);
 $("count-frame").addEventListener("load", renderRoi);
 for (const [id, action] of [["start-button", start], ["stop-button", stop], ["reset-button", reset]]) {

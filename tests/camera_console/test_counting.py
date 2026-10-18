@@ -195,6 +195,54 @@ def test_roi_worker_counts_on_first_tracked_center_and_reset_keeps_ids(worker):
     assert service._model.shapes[-1] == (100, 100, 3)
 
 
+@pytest.mark.parametrize("worker", [{
+    "count_mode": "roi", "roi": {"x": 40, "y": 10, "width": 40, "height": 50},
+}], indirect=True)
+def test_hide_outside_boxes_live_preserves_tracking_count_and_inside_boxes(worker, monkeypatch):
+    service, send, _, _ = worker
+    rectangles, labels = [], []
+    monkeypatch.setattr("src.camera_console.counting.cv2.rectangle", lambda *args: rectangles.append(args[1:]))
+    monkeypatch.setattr("src.camera_console.counting.cv2.putText", lambda *args: labels.append(args[1]))
+
+    def box_for(center_x):
+        return [item for item in rectangles if item[0] == (center_x - 3, 27)]
+
+    send(1, 30, 1)
+    assert box_for(30)[-1][2] == (35, 220, 80)
+    model = service._model
+    service.set_display_options({"show_outside_roi": False})
+    rectangles.clear()
+    labels.clear()
+    send(1, 30, 2)
+    assert not box_for(30)
+    assert not any(label.startswith("ID ") for label in labels)
+    assert service.status["count"] == service.status["detections"] == 0
+
+    # 左边界包含在 ROI 内，同一个跟踪 ID 进入后仍能正常计数。
+    send(1, 40, 3)
+    assert box_for(40)[-1][2] == (0, 190, 255)
+    assert "ID 1  0.90" in labels
+    assert service.status["count"] == service.status["detections"] == 1
+    rectangles.clear()
+    labels.clear()
+    send(1, 80, 4)
+    assert not box_for(80)  # 右边界属于 ROI 外，即使此 ID 已经计数也隐藏。
+    assert not any(label.startswith("ID ") for label in labels)
+    assert service.status["count"] == 1
+    assert service.status["detections"] == 0
+
+    service.set_display_options({"show_outside_roi": True})
+    send(1, 80, 5)
+    assert box_for(80)[-1][2] == (35, 220, 80)
+    assert service.status["count"] == 1
+    assert service._model is model
+    service.set_display_options({"show_outside_roi": False})
+    send(255, 50, 6)
+    assert box_for(50)[-1][2] == (0, 190, 255)
+    assert "ID -  0.90" in labels
+    assert service.status["count"] == service.status["detections"] == 1
+
+
 def test_restart_reuses_model_but_starts_new_counting_session(worker):
     service, send, _, _ = worker
     send(1, 20, 1)

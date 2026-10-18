@@ -50,6 +50,7 @@ class CountingService:
         line = data.get("count_line", {})
         return {
             "count_mode": str(data.get("counting", {}).get("mode", "line")),
+            "show_outside_roi": True,
             "weights": str(model.get("weights", "")),
             "imgsz": int(model.get("imgsz", 960)),
             "conf": float(model.get("conf", 0.10)),
@@ -121,7 +122,7 @@ class CountingService:
             if self._thread and self._thread.is_alive():
                 return self.status
             config = dict(self._config)
-            for key in ("count_mode", "weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
+            for key in ("count_mode", "show_outside_roi", "weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
                 if overrides and key in overrides:
                     config[key] = overrides[key]
             if overrides and isinstance(overrides.get("roi"), dict):
@@ -159,6 +160,15 @@ class CountingService:
             self._condition.notify_all()
             return self.status
 
+    def set_display_options(self, options: dict[str, Any]) -> dict[str, Any]:
+        """仅修改绘图选项，监测中切换也不重置模型、跟踪或计数。"""
+        show_outside = options.get("show_outside_roi")
+        if not isinstance(show_outside, bool):
+            raise ValueError("显示 ROI 外目标框必须为布尔值")
+        with self._lock:
+            self._config = {**self._config, "show_outside_roi": show_outside}
+            return self.status
+
     def wait_for_frame(self, after: int, timeout: float = 2.0) -> tuple[int, bytes | None]:
         with self._condition:
             self._condition.wait_for(lambda: self._sequence != after or not self.status["active"], timeout)
@@ -166,6 +176,8 @@ class CountingService:
 
     @staticmethod
     def _validate(config: dict[str, Any]) -> None:
+        if not isinstance(config["show_outside_roi"], bool):
+            raise ValueError("显示 ROI 外目标框必须为布尔值")
         if config["count_mode"] not in {"line", "roi"}:
             raise ValueError("计数方式必须是过线计数或 ROI 计数")
         weights = Path(str(config["weights"])).expanduser()
@@ -292,6 +304,8 @@ class CountingService:
                 result = model.track(crop, **self._track_options(config))[0]
                 boxes = result.boxes
                 ids = boxes.id.int().cpu().tolist() if boxes is not None and boxes.id is not None else [None] * (len(boxes) if boxes is not None else 0)
+                with self._lock:
+                    show_outside_roi = self._config["show_outside_roi"]
                 annotated = frame.copy()
                 cv2.rectangle(annotated, (x, y), (x + width, y + height), (48, 190, 220), 2)
                 if not is_roi:
@@ -307,9 +321,14 @@ class CountingService:
                     center = detection_center(full_box)
                     if track_id is not None:
                         counter.update(int(track_id), center)
-                    if not is_roi or x <= center[0] < x + width and y <= center[1] < y + height:
+                    inside_roi = x <= center[0] < x + width and y <= center[1] < y + height
+                    if not is_roi or inside_roi:
                         current += 1
-                    color = (35, 220, 80) if track_id not in counter.counted_ids else (0, 190, 255)
+                    # 只隐藏区域外的框与标签，仍保留完整跟踪和计数更新。
+                    if not inside_roi and not show_outside_roi:
+                        continue
+                    highlighted = inside_roi if is_roi else track_id in counter.counted_ids
+                    color = (0, 190, 255) if highlighted else (35, 220, 80)
                     cv2.rectangle(annotated, (full_box[0], full_box[1]), (full_box[2], full_box[3]), color, 2)
                     label = f"ID {track_id if track_id is not None else '-'}  {float(confidence):.2f}"
                     cv2.putText(annotated, label, (full_box[0], max(22, full_box[1] - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)

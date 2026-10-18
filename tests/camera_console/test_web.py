@@ -161,6 +161,22 @@ def test_region_and_shared_output_size_controls_are_next_to_preview():
     assert "当前采集区域" in tools
 
 
+def test_count_display_option_can_be_changed_without_starting_detection():
+    app = create_app(service=FakeWebService())
+    client = app.test_client()
+    assert client.get("/api/count/status").get_json()["status"]["config"]["show_outside_roi"] is True
+    for enabled in (False, True):
+        response = client.put("/api/count/display", json={"show_outside_roi": enabled})
+        assert response.status_code == 200
+        status = response.get_json()["status"]
+        assert status["config"]["show_outside_roi"] is enabled
+        assert status["active"] is False
+        assert status["count"] == 0
+    for invalid in ({}, {"show_outside_roi": "false"}, {"show_outside_roi": 0}, {"show_outside_roi": None}):
+        assert client.put("/api/count/display", json=invalid).status_code == 400
+        assert client.get("/api/count/status").get_json()["status"]["config"]["show_outside_roi"] is True
+
+
 def test_camera_source_selector_has_three_peer_sources_and_one_control_set():
     app = create_app(service=FakeWebService())
 

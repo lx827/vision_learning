@@ -40,3 +40,5 @@ body { min-width:0; }
 .model-selection { display:grid; gap:8px; margin-bottom:16px; }
 .model-selection .field-help { margin-top:0; overflow-wrap:anywhere; }
 #weights-select { max-width:100%; }
+.checkbox-field { flex-direction:row; align-items:center; gap:8px; min-height:44px; margin-top:12px; color:var(--ink); cursor:pointer; }
+.checkbox-field input { flex:0 0 auto; width:18px; height:18px; min-height:0; margin:0; padding:0; accent-color:var(--accent); }

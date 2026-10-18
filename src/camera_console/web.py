@@ -169,6 +169,10 @@ def create_app(
     def count_reset():
         return _ok(status=counting.reset())
 
+    @app.put("/api/count/display")
+    def count_display():
+        return _ok(status=counting.set_display_options(_json_body()))
+
     @app.get("/api/count/frame")
     def count_frame():
         after = request.args.get("after", default=-1, type=int)

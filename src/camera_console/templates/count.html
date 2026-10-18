@@ -49,6 +49,12 @@
           </div>
           <p class="error-text" id="error-text" role="status" hidden></p>
           <p class="field-help" id="model-state" role="status" aria-live="polite"></p>
+          <label class="checkbox-field" for="show-outside-roi">
+            <input id="show-outside-roi" type="checkbox" checked disabled aria-describedby="outside-roi-help">
+            显示 ROI 外目标框
+          </label>
+          <p class="field-help" id="outside-roi-help">ROI 计数时，区域内为黄框，区域外为绿框。取消勾选后只显示中心点位于 ROI 内的目标框和标签；监测中即时生效，不影响计数。</p>
+          <p class="error-text" id="display-error" role="status" hidden></p>
         </section>
         <fieldset id="detection-settings" class="control-panel">
           <div class="panel-heading"><h2>检测参数</h2></div>
