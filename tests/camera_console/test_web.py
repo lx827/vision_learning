@@ -177,6 +177,17 @@ def test_count_display_option_can_be_changed_without_starting_detection():
         assert client.get("/api/count/status").get_json()["status"]["config"]["show_outside_roi"] is True
 
 
+def test_count_enabled_is_validated_before_starting_camera():
+    app = create_app(service=FakeWebService())
+    client = app.test_client()
+    assert client.get("/api/count/status").get_json()["status"]["config"]["count_enabled"] is True
+    for invalid in ("false", 0, None):
+        response = client.post("/api/count/start", json={"count_enabled": invalid})
+        assert response.status_code == 400
+        assert "启用计数必须为布尔值" in response.get_json()["error"]
+        assert app.config["COUNTING_SERVICE"].status["active"] is False
+
+
 def test_camera_source_selector_has_three_peer_sources_and_one_control_set():
     app = create_app(service=FakeWebService())
 

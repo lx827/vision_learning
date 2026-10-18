@@ -50,6 +50,7 @@ class CountingService:
         line = data.get("count_line", {})
         return {
             "count_mode": str(data.get("counting", {}).get("mode", "line")),
+            "count_enabled": True,
             "show_outside_roi": True,
             "weights": str(model.get("weights", "")),
             "imgsz": int(model.get("imgsz", 960)),
@@ -122,7 +123,7 @@ class CountingService:
             if self._thread and self._thread.is_alive():
                 return self.status
             config = dict(self._config)
-            for key in ("count_mode", "show_outside_roi", "weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
+            for key in ("count_mode", "count_enabled", "show_outside_roi", "weights", "imgsz", "conf", "iou", "device", "tracker", "min_track_frames", "line_start", "line_end", "direction", "deadband_px"):
                 if overrides and key in overrides:
                     config[key] = overrides[key]
             if overrides and isinstance(overrides.get("roi"), dict):
@@ -176,6 +177,8 @@ class CountingService:
 
     @staticmethod
     def _validate(config: dict[str, Any]) -> None:
+        if not isinstance(config["count_enabled"], bool):
+            raise ValueError("启用计数必须为布尔值")
         if not isinstance(config["show_outside_roi"], bool):
             raise ValueError("显示 ROI 外目标框必须为布尔值")
         if config["count_mode"] not in {"line", "roi"}:
@@ -319,7 +322,7 @@ class CountingService:
                     offset_x, offset_y = (0, 0) if is_roi else (x, y)
                     full_box = (x1 + offset_x, y1 + offset_y, x2 + offset_x, y2 + offset_y)
                     center = detection_center(full_box)
-                    if track_id is not None:
+                    if config["count_enabled"] and track_id is not None:
                         counter.update(int(track_id), center)
                     inside_roi = x <= center[0] < x + width and y <= center[1] < y + height
                     if not is_roi or inside_roi:
@@ -333,7 +336,8 @@ class CountingService:
                     label = f"ID {track_id if track_id is not None else '-'}  {float(confidence):.2f}"
                     cv2.putText(annotated, label, (full_box[0], max(22, full_box[1] - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
                 cv2.rectangle(annotated, (14, 14), (300, 102), (22, 28, 32), -1)
-                cv2.putText(annotated, f"Count  {counter.count}", (28, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+                count_label = f"Count  {counter.count}" if config["count_enabled"] else "Count  OFF"
+                cv2.putText(annotated, count_label, (28, 50), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
                 cv2.putText(annotated, f"Detect  {current}", (28, 82), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (210, 220, 225), 1)
                 ok, encoded = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
                 if not ok:

@@ -34,7 +34,7 @@
           </div>
         </div>
       </section>
-      <aside class="control-column">
+      <aside class="control-column" tabindex="0" aria-label="检测控制与参数">
         <section class="metric-strip">
           <div class="metric-main"><strong id="count-value">0</strong><span>累计计数</span></div>
           <div><strong id="detect-value">0</strong><span>当前目标</span></div>
@@ -49,6 +49,11 @@
           </div>
           <p class="error-text" id="error-text" role="status" hidden></p>
           <p class="field-help" id="model-state" role="status" aria-live="polite"></p>
+          <label class="checkbox-field" for="count-enabled">
+            <input id="count-enabled" type="checkbox" checked disabled aria-describedby="count-enabled-help">
+            启用计数
+          </label>
+          <p class="field-help" id="count-enabled-help">开始监测前选择，监测中不可修改。取消勾选后只检测、跟踪和显示目标框，累计计数保持为 0。</p>
           <label class="checkbox-field" for="show-outside-roi">
             <input id="show-outside-roi" type="checkbox" checked disabled aria-describedby="outside-roi-help">
             显示 ROI 外目标框

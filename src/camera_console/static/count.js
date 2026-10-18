@@ -21,6 +21,7 @@ function roi() {
 function payload() {
   return {
     weights: $("weights-select").value,
+    count_enabled: $("count-enabled").checked,
     show_outside_roi: $("show-outside-roi").checked,
     count_mode: $("count-mode").value, conf: value("conf-input"), imgsz: value("imgsz-input"),
     roi: roi(), direction: $("direction-input").value,
@@ -137,6 +138,7 @@ function render(status) {
     $("direction-input").value = config.direction;
     $("deadband-input").value = config.deadband_px;
     $("count-mode").value = config.count_mode;
+    $("count-enabled").checked = config.count_enabled ?? true;
     setRoi(config.roi);
     state.initialized = true;
     updateRule();
@@ -150,11 +152,14 @@ function render(status) {
   $("count-fps-value").textContent = Number(status.fps ?? 0).toFixed(1);
   $("monitor-state").textContent = status.stopping ? "正在停止"
     : status.starting ? "正在准备模型，先显示相机预览"
-    : status.active ? "正在实时监测" : status.error ? "检测失败" : "相机预览 / 未开始监测";
+    : status.active ? (status.config?.count_enabled === false ? "正在实时检测 / 计数已关闭" : "正在实时监测")
+    : status.error ? "检测失败" : "相机预览 / 未开始监测";
   $("live-dot").classList.toggle("active", status.active && !status.starting);
   $("stop-button").disabled = !status.active && !status.starting;
   $("detection-settings").disabled = status.active || status.starting;
   $("count-settings").disabled = status.active || status.starting;
+  $("count-enabled").disabled = !state.initialized || status.active || status.starting;
+  if (status.active) $("count-enabled").checked = status.config?.count_enabled ?? true;
   $("draw-roi-button").disabled = !state.connected || !state.sourceWidth;
   $("full-roi-button").disabled = !state.connected || !state.sourceWidth;
   const modelName = status.config?.weights?.split(/[\\/]/).pop() || "";

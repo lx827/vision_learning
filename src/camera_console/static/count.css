@@ -29,7 +29,8 @@
 .roi-handle[data-edge="s"] { left:calc(50% - 12px); bottom:-2px; cursor:ns-resize; }
 .roi-handle[data-edge="sw"] { left:-2px; bottom:-2px; cursor:nesw-resize; }
 .roi-handle[data-edge="w"] { left:-2px; top:calc(50% - 12px); cursor:ew-resize; }
-#roi-box span { position:absolute; top:0; left:0; padding:2px 5px; color:#fff; background:#876500; font-size:11px; white-space:nowrap; }
+/* 标签避开左上角及上边缘的缩放控制点。 */
+#roi-box span { position:absolute; top:26px; left:26px; padding:2px 5px; color:#fff; background:#876500; font-size:11px; white-space:nowrap; pointer-events:none; }
 fieldset.control-panel { min-width:0; margin:0; }
 .roi-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 #line-rule-fields { margin-top:12px; }
@@ -42,3 +43,9 @@ body { min-width:0; }
 #weights-select { max-width:100%; }
 .checkbox-field { flex-direction:row; align-items:center; gap:8px; min-height:44px; margin-top:12px; color:var(--ink); cursor:pointer; }
 .checkbox-field input { flex:0 0 auto; width:18px; height:18px; min-height:0; margin:0; padding:0; accent-color:var(--accent); }
+/* 桌面端可滚动右侧参数，同时保留左侧画面供实时观察。 */
+@media (min-width:901px) {
+  .monitor-panel { position:sticky; top:16px; }
+  .control-column { position:sticky; top:16px; min-width:0; max-height:calc(100dvh - 32px); overflow-y:auto; overscroll-behavior-y:contain; scrollbar-gutter:stable; padding-right:4px; }
+  .control-column > * { flex-shrink:0; }
+}

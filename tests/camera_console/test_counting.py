@@ -258,6 +258,35 @@ def test_restart_reuses_model_but_starts_new_counting_session(worker):
     assert service.status["count"] == 1
 
 
+@pytest.mark.parametrize("worker", [
+    {"count_enabled": False, "count_mode": "roi"},
+    {"count_enabled": False, "count_mode": "line"},
+], indirect=True)
+def test_detection_only_keeps_boxes_and_tracking_without_counting(worker, monkeypatch):
+    service, send, _, _ = worker
+    labels = []
+    monkeypatch.setattr("src.camera_console.counting.cv2.putText", lambda *args: labels.append(args[1]))
+    send(1, 20, 1)
+    send(1, 60, 2)
+    send(2, 60, 3)
+    assert service.status["count"] == 0
+    assert service.status["detections"] == 1
+    assert "ID 1  0.90" in labels and "ID 2  0.90" in labels
+    assert "Count  OFF" in labels
+    # 运行中发起开始请求也不能改变本轮选定的计数开关。
+    assert service.start({"count_enabled": True})["config"]["count_enabled"] is False
+    service.reset()
+    send(3, 60, 4)
+    assert service.status["count"] == 0
+    model = service._model
+    service.stop()
+    service.start({"count_enabled": True})
+    send(4, 20, 5)
+    send(4, 60, 6)
+    assert service.status["count"] == 1
+    assert service._model is model
+
+
 def test_cannot_switch_model_while_counting(worker, tmp_path):
     service, send, _, _ = worker
     send(1, 20, 1)
