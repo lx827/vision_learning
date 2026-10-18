@@ -2,7 +2,7 @@
 camera_config: configs/camera/camera.yaml
 
 counting:
-  mode: line  # line: original directional crossing; roi: first tracked center inside ROI
+  mode: roi  # line: original directional crossing; roi: first tracked center inside ROI
 
 model:
   directory: weights/scallop_meat  # 网页从此目录列出可选的 .pt 权重

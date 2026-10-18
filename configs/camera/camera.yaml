@@ -18,8 +18,8 @@ capture_uvc:
   device_id: \\?\usb#vid_0bda&pid_1376&mi_00#6&26335655&0&0000#{e5323777-f976-4f5b-9b55-b94699c46e44}\global
   format_index: -1
 capture:
-  photo_dir: data/camera/20261017
-  video_dir: data/camera/videos/20261017
+  photo_dir: data/camera/pictures/20261018
+  video_dir: data/camera/videos/20261018
   photo_format: jpg
   jpeg_quality: 95
   auto_interval_seconds: 0.5
